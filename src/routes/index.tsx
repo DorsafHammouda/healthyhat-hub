@@ -1,33 +1,24 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { ShoppingBasket, BookOpen, ChefHat, MapPin, LogOut, Leaf } from "lucide-react";
+import { LogOut, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BottomNav } from "@/components/BottomNav";
+import { BasketCharacter } from "@/components/illustrations/BasketCharacter";
+import { RecipeBookCharacter } from "@/components/illustrations/RecipeBookCharacter";
+import { ChefCharacter } from "@/components/illustrations/ChefCharacter";
+import { MapPinCharacter } from "@/components/illustrations/MapPinCharacter";
+import { LeafBlob } from "@/components/illustrations/LeafBlob";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "HealthyHat — Dashboard" },
-      { name: "description", content: "Your healthy shopping companion: lists, AI chat, nearby stores, and more." },
+      { title: "HealthyHat — Your food buddy" },
+      { name: "description", content: "Your wholesome shopping companion: lists, AI chat, nearby stores, and more." },
     ],
   }),
   component: Dashboard,
 });
-
-type CardDef = {
-  to: "/shopping-trip" | "/grocery-list" | "/chat" | "/stores";
-  title: string;
-  subtitle: string;
-  Icon: typeof ShoppingBasket;
-  primary?: boolean;
-};
-
-const CARDS: CardDef[] = [
-  { to: "/shopping-trip", title: "Start Shopping Trip", subtitle: "Scan foods with AI", Icon: ShoppingBasket, primary: true },
-  { to: "/grocery-list", title: "Grocery List", subtitle: "Plan your basket", Icon: BookOpen },
-  { to: "/chat", title: "HealthyHat AI", subtitle: "Ask about food", Icon: ChefHat },
-  { to: "/stores", title: "Nearby Stores", subtitle: "Find groceries near you", Icon: MapPin },
-];
 
 function Dashboard() {
   const { user, loading, signOut } = useAuth();
@@ -44,60 +35,90 @@ function Dashboard() {
   const name = (user.user_metadata?.display_name as string) || user.email?.split("@")[0] || "friend";
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto w-full max-w-md px-4 pb-10 pt-6">
-        <header className="mb-6 flex items-start justify-between">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      {/* decorative blobs */}
+      <LeafBlob className="pointer-events-none absolute -right-16 -top-20 h-72 w-72 text-[oklch(0.92_0.07_155)]" />
+      <LeafBlob className="pointer-events-none absolute -left-24 top-40 h-56 w-56 rotate-45 text-[oklch(0.93_0.06_75)]" />
+
+      <div className="relative mx-auto w-full max-w-md px-5 pb-32 pt-8">
+        <header className="mb-7 flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 text-primary">
-              <Leaf className="h-5 w-5" />
-              <span className="text-sm font-semibold uppercase tracking-wider">HealthyHat</span>
-            </div>
-            <h1 className="mt-1 text-2xl font-bold leading-tight">Hello, {name} 👋</h1>
-            <p className="text-sm text-muted-foreground">What's on the menu today?</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">HealthyHat</p>
+            <h1 className="mt-1 text-3xl font-extrabold leading-tight">Hello, {name} 🌿</h1>
+            <p className="mt-1 text-sm text-muted-foreground">What's on the menu today?</p>
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={signOut}
             aria-label="Sign out"
-            className="rounded-full"
+            className="h-11 w-11 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-5 w-5" strokeWidth={2.25} />
           </Button>
         </header>
 
-        <div className="grid grid-cols-2 gap-4">
-          {CARDS.map(({ to, title, subtitle, Icon, primary }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`group flex aspect-square flex-col justify-between rounded-3xl border p-4 shadow-sm transition active:scale-[0.97] ${
-                primary
-                  ? "border-primary/20 bg-primary text-primary-foreground"
-                  : "border-border bg-card hover:bg-secondary"
-              }`}
-            >
-              <div
-                className={`grid h-11 w-11 place-items-center rounded-2xl ${
-                  primary ? "bg-primary-foreground/15" : "bg-secondary"
-                }`}
-              >
-                <Icon className={`h-6 w-6 ${primary ? "" : "text-primary"}`} />
-              </div>
-              <div>
-                <div className="text-base font-semibold leading-tight">{title}</div>
-                <div className={`mt-0.5 text-xs ${primary ? "text-primary-foreground/85" : "text-muted-foreground"}`}>
-                  {subtitle}
-                </div>
-              </div>
-            </Link>
-          ))}
+        {/* Hero card */}
+        <Link
+          to="/shopping-trip"
+          className="group relative mb-4 flex items-center justify-between overflow-hidden rounded-[2.25rem] bg-primary p-5 text-primary-foreground shadow-[0_20px_40px_-20px_oklch(0.6_0.15_145_/_0.5)] transition active:scale-[0.98]"
+        >
+          <div className="max-w-[55%]">
+            <div className="text-xs font-bold uppercase tracking-wider opacity-80">Today</div>
+            <div className="mt-1 text-2xl font-extrabold leading-tight">Start a shopping trip</div>
+            <div className="mt-1 text-sm opacity-90">Scan foods with AI</div>
+            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1.5 text-xs font-bold backdrop-blur">
+              Let's go <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </span>
+          </div>
+          <BasketCharacter className="-mr-3 h-36 w-36 shrink-0 drop-shadow-md" />
+        </Link>
+
+        {/* Stacked friendly cards */}
+        <div className="space-y-4">
+          <Link
+            to="/grocery-list"
+            className="flex items-center gap-4 rounded-[2rem] bg-[oklch(0.96_0.05_85)] p-4 shadow-sm transition active:scale-[0.98]"
+          >
+            <RecipeBookCharacter className="h-20 w-20 shrink-0" />
+            <div className="flex-1">
+              <div className="text-lg font-extrabold leading-tight text-foreground">Grocery List</div>
+              <div className="text-sm text-muted-foreground">Plan your basket</div>
+            </div>
+            <ArrowRight className="h-5 w-5 text-muted-foreground" strokeWidth={2.25} />
+          </Link>
+
+          <Link
+            to="/chat"
+            className="flex items-center gap-4 rounded-[2rem] bg-[oklch(0.92_0.07_155)] p-4 shadow-sm transition active:scale-[0.98]"
+          >
+            <ChefCharacter className="h-20 w-20 shrink-0" />
+            <div className="flex-1">
+              <div className="text-lg font-extrabold leading-tight text-foreground">HealthyHat AI</div>
+              <div className="text-sm text-muted-foreground">Ask about food</div>
+            </div>
+            <ArrowRight className="h-5 w-5 text-muted-foreground" strokeWidth={2.25} />
+          </Link>
+
+          <Link
+            to="/stores"
+            className="flex items-center gap-4 rounded-[2rem] bg-[oklch(0.9_0.08_55)] p-4 shadow-sm transition active:scale-[0.98]"
+          >
+            <MapPinCharacter className="h-20 w-20 shrink-0" />
+            <div className="flex-1">
+              <div className="text-lg font-extrabold leading-tight text-foreground">Nearby Stores</div>
+              <div className="text-sm text-foreground/70">Find groceries near you</div>
+            </div>
+            <ArrowRight className="h-5 w-5 text-foreground/60" strokeWidth={2.25} />
+          </Link>
         </div>
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">
+        <p className="mt-8 text-center text-xs font-bold text-muted-foreground">
           Eat fresh, shop smart 🌱
         </p>
       </div>
+
+      <BottomNav />
     </div>
   );
 }

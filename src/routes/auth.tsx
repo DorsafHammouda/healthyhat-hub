@@ -61,25 +61,25 @@ function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-secondary to-background px-4 py-10">
+    <div className="min-h-screen bg-gradient-to-b from-[oklch(0.93_0.06_150)] via-[oklch(0.96_0.05_85)] to-background px-4 py-10">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-3xl bg-primary text-primary-foreground shadow-lg">
-            <Leaf className="h-8 w-8" />
+          <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-[2rem] bg-primary text-primary-foreground shadow-[0_18px_40px_-18px_oklch(0.6_0.15_145_/_0.6)]">
+            <Leaf className="h-9 w-9" strokeWidth={2.25} />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">HealthyHat</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Smarter, healthier shopping.</p>
+          <h1 className="text-3xl font-extrabold tracking-tight">HealthyHat</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Welcome to your food buddy 🌱</p>
         </div>
 
-        <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-5 flex rounded-2xl bg-muted p-1 text-sm font-medium">
+        <div className="rounded-[2rem] border border-border bg-card p-6 shadow-[0_18px_40px_-18px_oklch(0.4_0.1_80_/_0.2)]">
+          <div className="mb-5 flex rounded-full bg-muted p-1 text-sm font-bold">
             {(["signin", "signup"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 onClick={() => setMode(m)}
-                className={`flex-1 rounded-xl py-2 transition ${
-                  mode === m ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
+                className={`flex-1 rounded-full py-2.5 transition ${
+                  mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
                 }`}
               >
                 {m === "signin" ? "Sign in" : "Sign up"}
@@ -91,18 +91,18 @@ function AuthPage() {
             {mode === "signup" && (
               <div className="space-y-1.5">
                 <Label htmlFor="name">Name</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="h-12 rounded-2xl px-4" />
               </div>
             )}
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 rounded-2xl px-4" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 rounded-2xl px-4" />
             </div>
-            <Button type="submit" disabled={busy} className="h-11 w-full rounded-2xl text-base">
+            <Button type="submit" disabled={busy} className="h-12 w-full rounded-full text-base font-extrabold">
               {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
             </Button>
           </form>

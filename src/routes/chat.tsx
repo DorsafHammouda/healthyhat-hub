@@ -5,9 +5,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { MobileShell } from "@/components/MobileShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, ChefHat } from "lucide-react";
+import { Send } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
+import { ChefCharacter } from "@/components/illustrations/ChefCharacter";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
@@ -58,7 +59,6 @@ function ChatPage() {
     setInput("");
     setStreaming(true);
 
-    // Persist user message
     supabase.from("chat_messages").insert({ user_id: user.id, role: "user", content: text }).then(() => {});
 
     try {
@@ -129,14 +129,12 @@ function ChatPage() {
 
   return (
     <MobileShell title="HealthyHat AI">
-      <div ref={scrollRef} className="h-[calc(100vh-180px)] overflow-y-auto pb-2">
+      <div ref={scrollRef} className="h-[calc(100vh-220px)] overflow-y-auto pb-2">
         {messages.length === 0 && (
-          <div className="mt-10 flex flex-col items-center text-center">
-            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-secondary text-primary">
-              <ChefHat className="h-8 w-8" />
-            </div>
+          <div className="mt-8 flex flex-col items-center text-center">
+            <ChefCharacter className="h-32 w-32" />
             <p className="mt-4 max-w-xs text-sm text-muted-foreground">
-              Hi! I'm your nutrition buddy. Ask me about ingredients, recipes, or how to eat healthier.
+              Hi! I'm your nutrition buddy 🥗 Ask me about ingredients, recipes, or how to eat healthier.
             </p>
           </div>
         )}
@@ -147,10 +145,10 @@ function ChatPage() {
               className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+                className={`max-w-[82%] rounded-3xl px-4 py-2.5 text-sm shadow-sm ${
                   m.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-card border border-border rounded-bl-md"
+                    ? "rounded-br-lg bg-primary text-primary-foreground"
+                    : "rounded-bl-lg bg-[oklch(0.93_0.06_150)] text-foreground"
                 }`}
               >
                 {m.role === "assistant" ? (
@@ -168,17 +166,21 @@ function ChatPage() {
 
       <form
         onSubmit={send}
-        className="fixed inset-x-0 bottom-0 mx-auto flex w-full max-w-md gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur"
+        className="fixed inset-x-0 bottom-24 z-10 mx-auto flex w-full max-w-md gap-2 px-4"
       >
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about food, recipes…"
-          className="h-11 rounded-2xl"
+          className="h-12 rounded-full border-border bg-card px-5 shadow-sm"
           disabled={streaming}
         />
-        <Button type="submit" disabled={streaming || !input.trim()} className="h-11 rounded-2xl px-4">
-          <Send className="h-5 w-5" />
+        <Button
+          type="submit"
+          disabled={streaming || !input.trim()}
+          className="h-12 w-12 rounded-full bg-[oklch(0.74_0.14_55)] p-0 text-[oklch(0.99_0.01_95)] shadow-md hover:bg-[oklch(0.7_0.14_55)]"
+        >
+          <Send className="h-5 w-5" strokeWidth={2.25} />
         </Button>
       </form>
     </MobileShell>
