@@ -33,7 +33,7 @@ const CAMERA_URL = "https://unripe-footing-situation.ngrok-free.dev/trigger-capt
 async function fetchCameraFrame(): Promise<string | null> {
   try {
     const resp = await fetch(CAMERA_URL, {
-      method: "POST",
+      method: "GET",
       mode: "cors",
       headers: {
         "ngrok-skip-browser-warning": "true",
