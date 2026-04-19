@@ -94,7 +94,15 @@ function ShoppingTrip() {
     ]);
 
     try {
-      const image = await fetchCameraFrame();
+      const result = await fetchCameraFrame();
+
+      if ("error" in result && result.error === "warming") {
+        toast("Camera warming up, please try again in a second.");
+        setMessages((p) => p.filter((m) => !m.pending));
+        return;
+      }
+
+      const image = "image" in result ? result.image : null;
       setCameraOffline(!image);
 
       if (!image) {
