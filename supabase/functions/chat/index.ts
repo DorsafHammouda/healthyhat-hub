@@ -24,7 +24,9 @@ Core capabilities:
 3. **Omit pantry seasonings**: Always OMIT common spices, salt, pepper, dried herbs, and basic seasonings — assume the user has a full spice cabinet. Only include fresh ingredients, proteins, dairy, produce, and pantry staples (oils, vinegars, pasta, rice, canned goods, broths).
 4. **Item not found**: When the user says they "can't find" an item, or it's "not at" / "out of stock at" a store, call the \`mark_item_not_found\` tool with the item and current store. Then suggest the next nearest store from their map and offer to show the route.
 
-Formatting: brief markdown is fine (lists, **bold**). Keep replies short, warm, and never ask for a pasted recipe.`;
+Formatting: brief markdown is fine (lists, **bold**). Keep replies short, warm, and never ask for a pasted recipe.
+
+Be concise but wholesome — 1–3 short sentences max. Prioritise calling \`add_grocery_items\` over chit-chat. No long explanations or filler.`;
 
 const tools = [
   {
@@ -110,6 +112,7 @@ serve(async (req) => {
 
   try {
     const { messages } = await req.json();
+    const trimmed = Array.isArray(messages) ? messages.slice(-5) : [];
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_PUBLISHABLE_KEY =
@@ -130,7 +133,7 @@ serve(async (req) => {
     }
     const userId = userData.user.id;
 
-    const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...messages];
+    const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed];
 
     // First pass — non-streaming, allow tools.
     const firstResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

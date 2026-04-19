@@ -82,6 +82,8 @@ export function estimateItemPrice(itemName: string, multiplier: number): number 
 }
 
 export function directionsUrl(lat: number, lng: number, label?: string) {
-  const dest = label ? `${label}@${lat},${lng}` : `${lat},${lng}`;
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+  const dest = label
+    ? `${encodeURIComponent(label)}+near+${lat},${lng}`
+    : `${lat},${lng}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=walking`;
 }
