@@ -152,14 +152,20 @@ function ShoppingTrip() {
     if (muted || !text) return;
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      // Try to pick an English voice for consistency
-      const voices = window.speechSynthesis.getVoices();
-      const en = voices.find((v) => v.lang?.toLowerCase().startsWith("en"));
-      if (en) utter.voice = en;
+      const utter = pendingUtterRef.current ?? new SpeechSynthesisUtterance("");
+      pendingUtterRef.current = null;
+      utter.text = text;
+      if (voiceRef.current) {
+        utter.voice = voiceRef.current;
+        utter.lang = voiceRef.current.lang;
+      } else {
+        utter.lang = "en-US";
+      }
       utter.rate = 1;
       utter.pitch = 1;
+      utter.onstart = () => console.log("[tts] start", text.slice(0, 40));
+      utter.onerror = (e: any) => console.error("[tts] error", e?.error ?? e);
+      window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utter);
     } catch (e) {
       console.error("speak failed", e);
