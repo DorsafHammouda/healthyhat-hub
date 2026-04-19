@@ -86,15 +86,23 @@ function Dashboard() {
             <h1 className="mt-1 text-3xl font-extrabold leading-tight">Hello, {name} 🌿</h1>
             <p className="mt-1 text-sm text-muted-foreground">What's on the menu today?</p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={signOut}
-            aria-label="Sign out"
-            className="h-11 w-11 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80"
-          >
-            <LogOut className="h-5 w-5" strokeWidth={2.25} />
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={signOut}
+              aria-label="Sign out"
+              className="h-11 w-11 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80"
+            >
+              <LogOut className="h-5 w-5" strokeWidth={2.25} />
+            </Button>
+            <Link
+              to="/manager"
+              className="rounded-full bg-[oklch(0.28_0.04_250)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[oklch(0.95_0.02_240)] shadow-sm hover:bg-[oklch(0.32_0.04_250)]"
+            >
+              Manager view
+            </Link>
+          </div>
         </header>
 
         {/* Hero card */}
