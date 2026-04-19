@@ -36,7 +36,7 @@ async function fetchCameraFrame(): Promise<string | null> {
       method: "POST",
       mode: "cors",
       headers: {
-        "ngrok-skip-browser-warning": "69420",
+        "ngrok-skip-browser-warning": "true",
       },
     });
     if (!resp.ok) {
