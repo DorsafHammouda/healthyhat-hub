@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { LogOut, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { RecipeBookCharacter } from "@/components/illustrations/RecipeBookCharac
 import { ChefCharacter } from "@/components/illustrations/ChefCharacter";
 import { MapPinCharacter } from "@/components/illustrations/MapPinCharacter";
 import { LeafBlob } from "@/components/illustrations/LeafBlob";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -23,10 +24,48 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const [hasNewItems, setHasNewItems] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
+
+  // Track unseen grocery items for the red dot.
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    let count = 0;
+    const evaluate = () => {
+      const lastSeen = Number(localStorage.getItem("hh:lastSeenGroceryCount") ?? "0");
+      if (active) setHasNewItems(count > lastSeen);
+    };
+
+    supabase
+      .from("grocery_lists")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .then(({ count: c }) => {
+        count = c ?? 0;
+        evaluate();
+      });
+
+    const channel = supabase
+      .channel(`dashboard_grocery_${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "grocery_lists", filter: `user_id=eq.${user.id}` },
+        () => {
+          count += 1;
+          evaluate();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   if (loading || !user) {
     return <div className="grid min-h-screen place-items-center text-muted-foreground">Loading…</div>;
@@ -78,7 +117,7 @@ function Dashboard() {
         <div className="space-y-4">
           <Link
             to="/grocery-list"
-            className="flex items-center gap-4 rounded-[2rem] bg-[oklch(0.96_0.05_85)] p-4 shadow-sm transition active:scale-[0.98]"
+            className="relative flex items-center gap-4 rounded-[2rem] bg-[oklch(0.96_0.05_85)] p-4 shadow-sm transition active:scale-[0.98]"
           >
             <RecipeBookCharacter className="h-20 w-20 shrink-0" />
             <div className="flex-1">
@@ -86,6 +125,12 @@ function Dashboard() {
               <div className="text-sm text-muted-foreground">Plan your basket</div>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground" strokeWidth={2.25} />
+            {hasNewItems && (
+              <span
+                aria-label="New items added"
+                className="absolute right-3 top-3 h-3 w-3 rounded-full bg-destructive ring-2 ring-background"
+              />
+            )}
           </Link>
 
           <Link
