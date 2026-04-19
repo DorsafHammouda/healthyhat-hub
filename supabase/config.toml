@@ -4,4 +4,4 @@ project_id = "lnjkrjanbakrafayqskk"
 verify_jwt = false
 
 [functions.vision-chat]
-verify_jwt = true
+verify_jwt = false
