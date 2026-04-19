@@ -110,7 +110,7 @@ function AuthPage() {
         </div>
 
         <Link
-          to="/manager"
+          to="/manager/login"
           className="mt-5 flex items-center justify-between rounded-2xl bg-[oklch(0.28_0.04_250)] px-5 py-3.5 text-[oklch(0.95_0.02_240)] shadow-sm transition hover:bg-[oklch(0.32_0.04_250)]"
         >
           <span className="flex items-center gap-3">
