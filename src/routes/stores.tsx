@@ -38,11 +38,11 @@ function StoresPage() {
   return (
     <MobileShell title="Nearby Stores">
       {denied && (
-        <p className="mb-3 rounded-2xl bg-accent/40 px-3 py-2 text-xs text-accent-foreground">
-          Location unavailable — showing a demo area.
+        <p className="mb-3 rounded-full bg-accent/40 px-4 py-2 text-xs font-bold text-accent-foreground">
+          Location unavailable — showing a demo area 🌍
         </p>
       )}
-      <div className="overflow-hidden rounded-3xl border border-border shadow-sm">
+      <div className="overflow-hidden rounded-[2rem] border border-border shadow-[0_18px_40px_-18px_oklch(0.4_0.1_80_/_0.2)]">
         {mounted && pos ? (
           <Suspense fallback={<div className="grid h-[70vh] place-items-center text-sm text-muted-foreground">Loading map…</div>}>
             <StoresMap pos={pos} />

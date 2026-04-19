@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { RecipeBookCharacter } from "@/components/illustrations/RecipeBookCharacter";
 
 export const Route = createFileRoute("/grocery-list")({
   head: () => ({
@@ -20,6 +21,8 @@ export const Route = createFileRoute("/grocery-list")({
 });
 
 type Item = { id: string; name: string; checked: boolean };
+
+const TINTS = ["bg-[oklch(0.96_0.05_85)]", "bg-[oklch(0.93_0.06_150)]"];
 
 function GroceryListPage() {
   const { user, loading } = useAuth();
@@ -81,34 +84,35 @@ function GroceryListPage() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Add an ingredient…"
-          className="h-11 rounded-2xl"
+          className="h-12 rounded-full bg-card px-5 shadow-sm"
         />
-        <Button type="submit" disabled={busy || !text.trim()} className="h-11 rounded-2xl px-4">
-          <Plus className="h-5 w-5" />
+        <Button type="submit" disabled={busy || !text.trim()} className="h-12 w-12 rounded-full bg-[oklch(0.74_0.14_55)] p-0 text-[oklch(0.99_0.01_95)] hover:bg-[oklch(0.7_0.14_55)]">
+          <Plus className="h-5 w-5" strokeWidth={2.5} />
         </Button>
       </form>
 
-      <ul className="mt-5 space-y-2">
+      <ul className="mt-5 space-y-3">
         {items.length === 0 && (
-          <li className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            Your list is empty. Add your first ingredient above. 🥕
+          <li className="flex flex-col items-center rounded-3xl border border-dashed border-border p-8 text-center">
+            <RecipeBookCharacter className="h-28 w-28" />
+            <p className="mt-3 text-sm text-muted-foreground">Your list is empty. Add your first ingredient above. 🥕</p>
           </li>
         )}
-        {items.map((it) => (
+        {items.map((it, i) => (
           <li
             key={it.id}
-            className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm"
+            className={`flex items-center gap-3 rounded-3xl px-5 py-4 shadow-sm ${TINTS[i % TINTS.length]}`}
           >
-            <Checkbox checked={it.checked} onCheckedChange={() => toggle(it)} />
-            <span className={`flex-1 text-sm ${it.checked ? "text-muted-foreground line-through" : ""}`}>
+            <Checkbox checked={it.checked} onCheckedChange={() => toggle(it)} className="h-5 w-5 rounded-full" />
+            <span className={`flex-1 text-sm font-bold ${it.checked ? "text-muted-foreground line-through" : "text-foreground"}`}>
               {it.name}
             </span>
             <button
               onClick={() => remove(it.id)}
               aria-label="Remove"
-              className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive"
+              className="grid h-9 w-9 place-items-center rounded-full bg-card/70 text-muted-foreground hover:text-destructive"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" strokeWidth={2.5} />
             </button>
           </li>
         ))}
