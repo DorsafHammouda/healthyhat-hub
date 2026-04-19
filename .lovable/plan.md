@@ -1,67 +1,37 @@
 
-# HealthyHat — Mobile Web App
+## Plan
 
-A fresh, vibrant green food-themed mobile app with four core features. Mobile-first responsive layout that looks great on phones.
+### 1. Auth persistence
+The Supabase client (`src/integrations/supabase/client.ts`) already sets `persistSession: true` and `autoRefreshToken: true` with `localStorage` storage — sessions already survive browser restarts. No code change needed; I'll verify this is working and the only sign-out path is the explicit Log Out button (it is, in `src/routes/index.tsx`).
 
-## Design system
-- **Colors**: Garden Green `#4CAF50` (primary), Crisp White, soft earth tones (warm beige, light cream, soft brown accents) — applied via `styles.css` design tokens (oklch).
-- **Typography**: Modern friendly sans-serif (Inter / system stack), generous sizing.
-- **Shapes**: Rounded 2xl corners, soft shadows, plenty of whitespace — no clutter.
-- **Icons**: Lucide (`ShoppingBasket`, `BookOpen`, `ChefHat`, `MapPin`).
+No edit required for auth — I'll confirm this in the response.
 
-## Auth (Lovable Cloud)
-- Email + password sign-up / sign-in screen.
-- Auto-redirect to dashboard when logged in; protected routes otherwise.
-- Sign-out button in the dashboard header.
-- A `profiles` table (id, display_name) auto-created on signup via trigger.
+### 2. Map updates (`src/components/StoresMap.tsx` + `src/routes/stores.tsx`)
 
-## Routes
-- `/auth` — Sign in / sign up
-- `/` — Dashboard with 4 cards + greeting
-- `/shopping-trip` — Placeholder "Coming soon: camera & AI recognition" screen
-- `/grocery-list` — Add ingredients + checklist
-- `/chat` — HealthyHat AI chatbot
-- `/stores` — Leaflet map with user location + nearby store pins
+**Person icon for user location**
+- Replace the `CircleMarker` with a `Marker` using a custom `L.divIcon` containing a person SVG/emoji (👤) in a green circular badge.
 
-Each route has its own SEO metadata (title, description, og tags).
+**Real grocery stores via Overpass API (OpenStreetMap)**
+- Drop the mock store list in `stores.tsx`.
+- In `StoresMap.tsx`, query Overpass API on mount and on `moveend` for the current map bounds:
+  ```
+  [out:json][timeout:15];
+  (
+    node["shop"~"supermarket|convenience|greengrocer|grocery|health_food|farm"](south,west,north,east);
+    way["shop"~"supermarket|convenience|greengrocer|grocery|health_food|farm"](south,west,north,east);
+  );
+  out center 60;
+  ```
+- Use `https://overpass-api.de/api/interpreter` (no key needed).
+- Parse results → `{ id, name, type, lat, lng }`, dedupe by id, cap at ~60 pins.
+- Use a `useMap()` helper child component to access the map instance and listen for `moveend` to refetch when the user pans/zooms.
+- Show a small "Loading stores…" indicator overlaid while fetching; gracefully ignore errors.
 
-## Dashboard
-- Friendly greeting ("Hello 👋") + leafy header.
-- 2×2 grid of large rounded cards on mobile, each with:
-  1. 🧺 **Start Shopping Trip** — primary green card
-  2. 📖 **Create Grocery List**
-  3. 👨‍🍳 **HealthyHat AI Chatbot**
-  4. 📍 **Nearby Stores**
-- Bottom-safe spacing, subtle food illustrations/emoji accents.
+**Distinct store marker**
+- Keep a `divIcon` for stores but switch the emoji to a shopping basket 🧺 (already basket-shaped) on a white pin with green border — visually distinct from the user's green person badge.
 
-## Grocery List (`/grocery-list`)
-- Single text input + "Add" button.
-- Items render as a checklist (tap to check off, swipe/× to delete).
-- Saved per-user in a Cloud `grocery_items` table (RLS: user can only see their own).
-- Persists across sessions and devices.
+### 3. Files touched
+- `src/components/StoresMap.tsx` — new icons, Overpass fetch, bounds-driven refetch.
+- `src/routes/stores.tsx` — remove mock `stores` array; pass only `pos` to map.
 
-## AI Chatbot (`/chat`)
-- Full chat UI: message bubbles (user right / AI left), input with send button, auto-scroll, loading indicator.
-- Markdown rendering for AI replies.
-- Streaming responses via a server function calling Lovable AI Gateway (`google/gemini-3-flash-preview`).
-- System prompt: nutrition / healthy-eating expert focused on food, ingredients, recipes.
-- Conversation history saved per-user in `chat_messages` table so it persists.
-- Handles 429/402 errors with friendly toasts.
-
-## Nearby Stores (`/stores`)
-- Leaflet + OpenStreetMap (free, no key) via `react-leaflet`.
-- Requests browser geolocation; centers on user with a "You" marker.
-- 3–4 mock store pins generated as small offsets from the user's location, each with a popup (name, type, distance).
-- Graceful fallback to a default city center if geolocation is denied.
-
-## Shopping Trip (`/shopping-trip`)
-- Friendly placeholder screen with camera icon, "Coming soon — point your camera to scan foods with AI" copy, and a Back button.
-
-## Data model (Lovable Cloud)
-- `profiles` (id → auth.users, display_name)
-- `grocery_items` (id, user_id, name, checked, created_at) — RLS: user owns
-- `chat_messages` (id, user_id, role, content, created_at) — RLS: user owns
-
-## Mobile responsiveness
-- Designed mobile-first (390px viewport target), works up through tablet/desktop with a max-width centered container.
-- Sticky bottom-friendly tap targets, large touch areas on cards and buttons.
+No new dependencies; uses existing `react-leaflet` + `leaflet` + `fetch`.
