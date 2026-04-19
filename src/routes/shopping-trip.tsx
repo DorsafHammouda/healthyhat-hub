@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { useScribe } from "@elevenlabs/react";
+import { useScribe, CommitStrategy } from "@elevenlabs/react";
 
 export const Route = createFileRoute("/shopping-trip")({
   head: () => ({
@@ -111,7 +111,7 @@ function ShoppingTrip() {
   // STT: ElevenLabs Scribe
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
-    commitStrategy: "vad",
+    commitStrategy: CommitStrategy.Vad,
     onPartialTranscript: (data: any) => {
       const partial = data?.text ?? "";
       const base = inputBeforeDictationRef.current;
