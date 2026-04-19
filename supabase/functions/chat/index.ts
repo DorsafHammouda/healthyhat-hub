@@ -135,97 +135,121 @@ serve(async (req) => {
 
     const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed];
 
-    // First pass — non-streaming, allow tools.
-    const firstResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: convo,
-        tools,
-      }),
-    });
-
-    if (firstResp.status === 429)
-      return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    if (firstResp.status === 402)
-      return new Response(JSON.stringify({ error: "Payment required" }), {
-        status: 402,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    if (!firstResp.ok) {
-      const t = await firstResp.text();
-      console.error("AI first pass error:", firstResp.status, t);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const firstJson = await firstResp.json();
-    const assistantMsg = firstJson.choices?.[0]?.message;
-    const toolCalls = assistantMsg?.tool_calls ?? [];
-
-    if (toolCalls.length) {
-      convo.push(assistantMsg);
-      for (const tc of toolCalls) {
-        let args: any = {};
-        try {
-          args = JSON.parse(tc.function?.arguments ?? "{}");
-        } catch {
-          args = {};
-        }
-        const result = await executeTool(tc.function.name, args, supabase, userId);
-        convo.push({ role: "tool", tool_call_id: tc.id, content: result });
-      }
-    } else if (assistantMsg) {
-      // No tool call — we already have the assistant text. Stream it back synthetically
-      // so the client streaming code keeps working.
-      const text = assistantMsg.content ?? "";
-      const stream = new ReadableStream({
-        start(controller) {
-          const enc = new TextEncoder();
-          const chunk = JSON.stringify({ choices: [{ delta: { content: text } }] });
-          controller.enqueue(enc.encode(`data: ${chunk}\n\n`));
-          controller.enqueue(enc.encode(`data: [DONE]\n\n`));
-          controller.close();
+    // Helper: stream a chat completion. Forwards text deltas to the client and
+    // accumulates any tool_call deltas. Returns the assembled tool calls (if any).
+    async function streamPass(
+      withTools: boolean,
+      writer: WritableStreamDefaultWriter<Uint8Array>,
+      enc: TextEncoder,
+    ): Promise<{ toolCalls: any[]; assistantContent: string; status: number; errBody?: string }> {
+      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: convo,
+          stream: true,
+          ...(withTools ? { tools } : {}),
+        }),
       });
-      return new Response(stream, {
-        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-      });
+      if (!resp.ok || !resp.body) {
+        const errBody = await resp.text().catch(() => "");
+        return { toolCalls: [], assistantContent: "", status: resp.status, errBody };
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let assistantContent = "";
+      const toolAcc: Record<number, { id?: string; name?: string; args: string }> = {};
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line || line.startsWith(":")) continue;
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") continue;
+          let j: any;
+          try { j = JSON.parse(payload); } catch { continue; }
+          const delta = j.choices?.[0]?.delta;
+          if (!delta) continue;
+          if (typeof delta.content === "string" && delta.content) {
+            assistantContent += delta.content;
+            const out = JSON.stringify({ choices: [{ delta: { content: delta.content } }] });
+            await writer.write(enc.encode(`data: ${out}\n\n`));
+          }
+          if (Array.isArray(delta.tool_calls)) {
+            for (const tc of delta.tool_calls) {
+              const i = tc.index ?? 0;
+              const slot = (toolAcc[i] ??= { args: "" });
+              if (tc.id) slot.id = tc.id;
+              if (tc.function?.name) slot.name = tc.function.name;
+              if (tc.function?.arguments) slot.args += tc.function.arguments;
+            }
+          }
+        }
+      }
+      const toolCalls = Object.keys(toolAcc)
+        .map((k) => Number(k))
+        .sort((a, b) => a - b)
+        .map((i) => ({
+          id: toolAcc[i].id ?? `call_${i}`,
+          type: "function",
+          function: { name: toolAcc[i].name ?? "", arguments: toolAcc[i].args },
+        }))
+        .filter((c) => c.function.name);
+      return { toolCalls, assistantContent, status: 200 };
     }
 
-    // Second pass — streaming follow-up with tool results in context.
-    const followResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: convo,
-        stream: true,
-      }),
-    });
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const enc = new TextEncoder();
 
-    if (!followResp.ok || !followResp.body) {
-      const t = await followResp.text().catch(() => "");
-      console.error("AI follow-up error:", followResp.status, t);
-      return new Response(JSON.stringify({ error: "AI follow-up error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    (async () => {
+      try {
+        const first = await streamPass(true, writer, enc);
+        if (first.status === 429 || first.status === 402) {
+          const errOut = JSON.stringify({
+            choices: [{ delta: { content: first.status === 429 ? "Rate limit exceeded." : "AI credits exhausted." } }],
+          });
+          await writer.write(enc.encode(`data: ${errOut}\n\n`));
+        } else if (first.status !== 200) {
+          console.error("AI first pass error:", first.status, first.errBody);
+          const errOut = JSON.stringify({ choices: [{ delta: { content: "Sorry, something went wrong. 🌱" } }] });
+          await writer.write(enc.encode(`data: ${errOut}\n\n`));
+        } else if (first.toolCalls.length) {
+          convo.push({
+            role: "assistant",
+            content: first.assistantContent || null,
+            tool_calls: first.toolCalls,
+          });
+          for (const tc of first.toolCalls) {
+            let args: any = {};
+            try { args = JSON.parse(tc.function.arguments || "{}"); } catch { args = {}; }
+            const result = await executeTool(tc.function.name, args, supabase, userId);
+            convo.push({ role: "tool", tool_call_id: tc.id, content: result });
+          }
+          await streamPass(false, writer, enc);
+        }
+        await writer.write(enc.encode(`data: [DONE]\n\n`));
+      } catch (err) {
+        console.error("stream error:", err);
+      } finally {
+        try { await writer.close(); } catch { /* ignore */ }
+      }
+    })();
 
-    return new Response(followResp.body, {
+    return new Response(readable, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
