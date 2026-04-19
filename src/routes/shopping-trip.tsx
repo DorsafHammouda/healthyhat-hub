@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { useScribe, CommitStrategy } from "@elevenlabs/react";
 
 export const Route = createFileRoute("/shopping-trip")({
   head: () => ({
@@ -73,6 +72,11 @@ async function fetchCameraFrame(): Promise<CameraResult> {
   }
 }
 
+function getSpeechRecognitionCtor(): any {
+  if (typeof window === "undefined") return null;
+  return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+}
+
 function ShoppingTrip() {
   const { user, loading, session } = useAuth();
   const navigate = useNavigate();
@@ -84,8 +88,8 @@ function ShoppingTrip() {
   const [listening, setListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const inputBeforeDictationRef = useRef("");
+  const recognitionRef = useRef<any>(null);
+  const baseInputRef = useRef("");
 
   // Load mute pref
   useEffect(() => {
@@ -94,61 +98,103 @@ function ShoppingTrip() {
     } catch {}
   }, []);
 
+  const stopSpeaking = () => {
+    try {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    } catch {}
+  };
+
   const toggleMuted = () => {
     setMuted((m) => {
       const next = !m;
       try {
         localStorage.setItem(TTS_MUTED_KEY, next ? "1" : "0");
       } catch {}
-      if (next && audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      if (next) stopSpeaking();
       return next;
     });
   };
 
-  // STT: ElevenLabs Scribe
-  const scribe = useScribe({
-    modelId: "scribe_v2_realtime",
-    commitStrategy: CommitStrategy.VAD,
-    onPartialTranscript: (data: any) => {
-      const partial = data?.text ?? "";
-      const base = inputBeforeDictationRef.current;
-      setInput(base ? `${base} ${partial}`.trim() : partial);
-    },
-    onCommittedTranscript: (data: any) => {
-      const committed = data?.text ?? "";
-      if (!committed) return;
-      const base = inputBeforeDictationRef.current;
-      const next = base ? `${base} ${committed}`.trim() : committed;
-      inputBeforeDictationRef.current = next;
-      setInput(next);
-    },
-  });
-
-  const startListening = async () => {
+  const speak = (text: string) => {
+    if (muted || !text) return;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
-      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
-      if (error || !data?.token) {
-        toast.error("Couldn't start mic. Try again.");
-        return;
-      }
-      inputBeforeDictationRef.current = input;
-      await scribe.connect({
-        token: data.token,
-        microphone: { echoCancellation: true, noiseSuppression: true },
-      });
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      // Try to pick an English voice for consistency
+      const voices = window.speechSynthesis.getVoices();
+      const en = voices.find((v) => v.lang?.toLowerCase().startsWith("en"));
+      if (en) utter.voice = en;
+      utter.rate = 1;
+      utter.pitch = 1;
+      window.speechSynthesis.speak(utter);
+    } catch (e) {
+      console.error("speak failed", e);
+    }
+  };
+
+  const startListening = () => {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) {
+      toast.error("Speech recognition isn't supported in this browser. Try Chrome or Safari.");
+      return;
+    }
+    try {
+      const rec = new Ctor();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+
+      baseInputRef.current = input;
+
+      rec.onresult = (event: any) => {
+        let interim = "";
+        let finalText = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalText += transcript;
+          else interim += transcript;
+        }
+        if (finalText) {
+          baseInputRef.current = (baseInputRef.current
+            ? `${baseInputRef.current} ${finalText}`
+            : finalText
+          ).trim();
+        }
+        const composed = (baseInputRef.current
+          ? `${baseInputRef.current} ${interim}`
+          : interim
+        ).trim();
+        setInput(composed);
+      };
+
+      rec.onerror = (e: any) => {
+        console.error("SpeechRecognition error", e);
+        if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
+          toast.error("Microphone permission denied.");
+        }
+        setListening(false);
+      };
+
+      rec.onend = () => {
+        setListening(false);
+      };
+
+      recognitionRef.current = rec;
+      rec.start();
       setListening(true);
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message ?? "Mic failed");
+      setListening(false);
     }
   };
 
-  const stopListening = async () => {
+  const stopListening = () => {
     try {
-      await scribe.disconnect();
+      recognitionRef.current?.stop();
     } catch {}
     setListening(false);
   };
@@ -158,18 +204,14 @@ function ShoppingTrip() {
     else startListening();
   };
 
-  // Auto-cleanup mic on unmount
+  // Auto-cleanup on unmount
   useEffect(() => {
     return () => {
       try {
-        scribe.disconnect();
+        recognitionRef.current?.stop();
       } catch {}
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      stopSpeaking();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -179,42 +221,6 @@ function ShoppingTrip() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
-
-  const playReply = async (text: string) => {
-    if (muted || !text) return;
-    try {
-      // Stop previous
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      const { data, error } = await supabase.functions.invoke("elevenlabs-tts", {
-        body: { text },
-      });
-      if (error) {
-        console.error("TTS invoke error", error);
-        return;
-      }
-      // If server returned JSON fallback (quota/auth issue), data is a Blob of type application/json
-      if (data instanceof Blob && data.type.includes("json")) {
-        const txt = await data.text();
-        console.warn("TTS unavailable:", txt);
-        toast("Voice unavailable (ElevenLabs quota/auth issue)");
-        return;
-      }
-      const blob =
-        data instanceof Blob
-          ? data
-          : new Blob([data as ArrayBuffer], { type: "audio/mpeg" });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play().catch((e) => console.error("Audio play failed", e));
-    } catch (e) {
-      console.error("playReply failed", e);
-    }
-  };
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -226,13 +232,13 @@ function ShoppingTrip() {
     // Stop dictation if active
     if (listening) {
       try {
-        await scribe.disconnect();
+        recognitionRef.current?.stop();
       } catch {}
       setListening(false);
     }
 
     setInput("");
-    inputBeforeDictationRef.current = "";
+    baseInputRef.current = "";
     setBusy(true);
     setMessages((p) => [
       ...p,
@@ -291,7 +297,7 @@ function ShoppingTrip() {
       });
 
       // Speak the reply
-      playReply(reply);
+      speak(reply);
     } catch (err: any) {
       toast.error(err?.message ?? "Assistant failed");
       setMessages((p) => p.filter((m) => !m.pending));
@@ -387,7 +393,7 @@ function ShoppingTrip() {
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
-            inputBeforeDictationRef.current = e.target.value;
+            baseInputRef.current = e.target.value;
           }}
           placeholder={listening ? "Listening…" : "Ask about an item you see…"}
           className="h-12 rounded-full border-border bg-card px-5 shadow-sm"
