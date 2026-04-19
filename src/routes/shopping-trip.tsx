@@ -28,9 +28,22 @@ type Msg = {
   pending?: boolean;
 };
 
-const CAMERA_URL = "https://ngrok-free.dev";
+const CAMERA_URL = "https://unripe-footing-situation.ngrok-free.dev/latest.jpg";
 
 type CameraResult = { image: string } | { error: "warming" } | { error: "offline" };
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
+    reader.readAsDataURL(blob);
+  });
+}
 
 async function fetchCameraFrame(): Promise<CameraResult> {
   try {
@@ -39,7 +52,6 @@ async function fetchCameraFrame(): Promise<CameraResult> {
       mode: "cors",
       headers: {
         "ngrok-skip-browser-warning": "true",
-        "Content-Type": "application/json",
       },
     });
     if (resp.status === 503) {
@@ -49,10 +61,9 @@ async function fetchCameraFrame(): Promise<CameraResult> {
       console.error(`Fetch failed to ngrok: HTTP ${resp.status} ${resp.statusText}`);
       return { error: "offline" };
     }
-    const json = await resp.json();
-    if (typeof json?.image_base64 === "string") {
-      return { image: json.image_base64 };
-    }
+    const blob = await resp.blob();
+    const image = await blobToBase64(blob);
+    if (image) return { image };
     return { error: "offline" };
   } catch (err: any) {
     console.error(`Fetch failed to ngrok: ${err?.name ?? "Error"} - ${err?.message ?? err}`);
