@@ -90,12 +90,43 @@ function ShoppingTrip() {
   const sendingRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const baseInputRef = useRef("");
+  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const primedRef = useRef(false);
+  const pendingUtterRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Load mute pref
+  // Load mute pref + preload voices
   useEffect(() => {
     try {
       setMuted(localStorage.getItem(TTS_MUTED_KEY) === "1");
     } catch {}
+
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const pickVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+      const en =
+        voices.find((v) => v.lang?.toLowerCase().startsWith("en") && v.localService) ||
+        voices.find((v) => v.lang?.toLowerCase().startsWith("en")) ||
+        voices[0];
+      if (en) voiceRef.current = en;
+    };
+    pickVoice();
+    window.speechSynthesis.onvoiceschanged = pickVoice;
+
+    // Warn if voices never load (e.g. Firefox Android)
+    const t = setTimeout(() => {
+      if (!window.speechSynthesis.getVoices().length) {
+        console.warn("speechSynthesis: no voices available on this device/browser");
+      }
+    }, 1500);
+
+    return () => {
+      clearTimeout(t);
+      try {
+        window.speechSynthesis.onvoiceschanged = null;
+      } catch {}
+    };
   }, []);
 
   const stopSpeaking = () => {
@@ -121,14 +152,20 @@ function ShoppingTrip() {
     if (muted || !text) return;
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      // Try to pick an English voice for consistency
-      const voices = window.speechSynthesis.getVoices();
-      const en = voices.find((v) => v.lang?.toLowerCase().startsWith("en"));
-      if (en) utter.voice = en;
+      const utter = pendingUtterRef.current ?? new SpeechSynthesisUtterance("");
+      pendingUtterRef.current = null;
+      utter.text = text;
+      if (voiceRef.current) {
+        utter.voice = voiceRef.current;
+        utter.lang = voiceRef.current.lang;
+      } else {
+        utter.lang = "en-US";
+      }
       utter.rate = 1;
       utter.pitch = 1;
+      utter.onstart = () => console.log("[tts] start", text.slice(0, 40));
+      utter.onerror = (e: any) => console.error("[tts] error", e?.error ?? e);
+      window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utter);
     } catch (e) {
       console.error("speak failed", e);
@@ -228,6 +265,31 @@ function ShoppingTrip() {
     if (!text || busy || !session) return;
     if (sendingRef.current) return;
     sendingRef.current = true;
+
+    // Prime speech synthesis inside the user gesture (required for iOS Safari / mobile)
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        if (!primedRef.current) {
+          const primer = new SpeechSynthesisUtterance("");
+          primer.volume = 0;
+          window.speechSynthesis.speak(primer);
+          primedRef.current = true;
+        }
+        // Pre-create utterance synchronously so it retains gesture context across the await
+        if (!muted) {
+          const utter = new SpeechSynthesisUtterance("");
+          if (voiceRef.current) {
+            utter.voice = voiceRef.current;
+            utter.lang = voiceRef.current.lang;
+          } else {
+            utter.lang = "en-US";
+          }
+          pendingUtterRef.current = utter;
+        }
+      } catch (err) {
+        console.error("[tts] prime failed", err);
+      }
+    }
 
     // Stop dictation if active
     if (listening) {
