@@ -1,33 +1,49 @@
 
 
-## Goal
-Replace ElevenLabs with browser-native APIs (no API keys, no quota issues, no edge functions needed).
+## Diagnosis
 
-## Approach
-- **TTS**: Web Speech API `speechSynthesis` (built into all modern browsers, free, instant).
-- **STT**: Web Speech API `SpeechRecognition` / `webkitSpeechRecognition` (built into Chrome, Edge, Safari — works on mobile too).
+The Web Speech API `speechSynthesis.speak()` works on your dev machine but fails on other devices (especially iOS Safari, mobile Chrome, and some Android browsers) due to **browser autoplay/gesture policies**.
 
-Both run entirely client-side. No edge functions, no API keys, no network round-trips.
+### Root cause
 
-## Changes
+Currently in `shopping-trip.tsx`, `speak(reply)` is called **inside an async callback** after `await supabase.functions.invoke("vision-chat", ...)`. By the time the network request resolves (1–5 seconds later), the browser has **lost the user gesture context** from the original form submit. Mobile browsers (especially iOS Safari) then silently refuse to play the utterance.
 
-### 1. `src/routes/shopping-trip.tsx` (modified)
-- Remove `@elevenlabs/react` `useScribe` usage and all `supabase.functions.invoke("elevenlabs-tts" / "elevenlabs-scribe-token")` calls.
-- Remove `audioRef` blob playback.
-- **TTS**: new `speak(text)` helper using `window.speechSynthesis.speak(new SpeechSynthesisUtterance(text))`. Cancel previous utterance before speaking new one. Skip if `muted`.
-- **STT**: new `useSpeechRecognition()` inline logic using `window.SpeechRecognition || window.webkitSpeechRecognition`. Continuous + interim results. On result → update `input` state. On end → just stop listening (user still presses send).
-- Keep mic button, speaker toggle, input, send button, all bubble UI, camera logic, error handling — all unchanged.
-- Show toast if browser doesn't support SpeechRecognition (e.g. Firefox).
+Additional contributing factors:
+1. **Voices load asynchronously** — `getVoices()` returns `[]` on first call in many browsers. We pick `undefined` as the voice and some mobile browsers refuse to speak with no voice set.
+2. **iOS Safari quirk** — `speechSynthesis` must be "primed" with a synchronous `.speak()` call inside a user gesture at least once per page load before any later async speech works.
+3. **No error/event logging** — we have no `onerror` / `onstart` handlers so failures are invisible.
 
-### 2. Cleanup (optional, safe to leave)
-- `supabase/functions/elevenlabs-tts/` and `supabase/functions/elevenlabs-scribe-token/` — leave as-is (unused, harmless). Remove their entries from `supabase/config.toml`.
-- `package.json` — remove `@elevenlabs/react` dependency.
+## Fix
+
+Apply the gesture-preserving pattern (matches the known-good Stack Overflow solution):
+
+### 1. Prime speech synthesis on first user gesture
+On the form submit (synchronous, inside the gesture), create an empty `SpeechSynthesisUtterance` and call `speak()` on it immediately. This unlocks the speech engine for the rest of the session on iOS/Safari.
+
+### 2. Pre-create the utterance synchronously
+Inside `send()` (before the `await`), create `const utter = new SpeechSynthesisUtterance("")`. After the AI reply arrives, just set `utter.text = reply` and call `speechSynthesis.speak(utter)`. The utterance retains gesture context.
+
+### 3. Wait for voices to load
+Add a `voiceschanged` listener / poll once on mount so `getVoices()` returns a real list. Cache the chosen English voice in a ref.
+
+### 4. Add diagnostics
+Wire `utter.onerror` and `utter.onstart` to `console.log` so we can see in the remote device's console exactly what's happening.
+
+### 5. Handle the muted case correctly
+Even when muted, still call `speak("")` synchronously to keep the engine primed (so unmuting later works). Or skip entirely — but document the tradeoff.
+
+## Files changed
+
+- `src/routes/shopping-trip.tsx` — refactor `speak()` + `send()` to preserve gesture context, preload voices, add error logging, prime on first interaction.
+
+No new dependencies, no edge functions, no secrets.
 
 ## What stays identical
-Camera fetch, ngrok URL, `vision-chat` invoke, bubble UI, typed input, send button, mic button placement, speaker toggle, all error handling, auth gate, localStorage mute pref.
 
-## Notes
-- Web Speech API STT requires HTTPS (preview/published URLs are HTTPS, so fine).
-- Voice selection: use the browser's default voice. Optionally pick first English voice for consistency.
-- No secret needed.
+Camera fetch, vision-chat invoke, bubble UI, mic STT, mute toggle, localStorage pref, all error handling.
+
+## Caveats
+
+- **Firefox on Android**: no `speechSynthesis` voices ship by default — will remain silent. We'll show a one-time toast if `getVoices()` stays empty after 1s.
+- **In-app browsers** (Instagram, Facebook, TikTok webviews): some block speech entirely. Not fixable from app code.
 
