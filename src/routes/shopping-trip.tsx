@@ -195,7 +195,13 @@ function ShoppingTrip() {
         console.error("TTS invoke error", error);
         return;
       }
-      // data should be a Blob
+      // If server returned JSON fallback (quota/auth issue), data is a Blob of type application/json
+      if (data instanceof Blob && data.type.includes("json")) {
+        const txt = await data.text();
+        console.warn("TTS unavailable:", txt);
+        toast("Voice unavailable (ElevenLabs quota/auth issue)");
+        return;
+      }
       const blob =
         data instanceof Blob
           ? data
