@@ -43,10 +43,15 @@ serve(async (req) => {
     if (!resp.ok || !resp.body) {
       const t = await resp.text().catch(() => "");
       console.error("ElevenLabs TTS error:", resp.status, t);
-      return new Response(JSON.stringify({ error: "TTS failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const isAuthOrAbuse = resp.status === 401 || resp.status === 403;
+      return new Response(
+        JSON.stringify({
+          error: isAuthOrAbuse ? "TTS_UNAVAILABLE" : "TTS_FAILED",
+          detail: t.slice(0, 300),
+          fallback: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     return new Response(resp.body, {
