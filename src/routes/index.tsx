@@ -79,7 +79,7 @@ function Dashboard() {
         <div className="space-y-4">
           <Link
             to="/grocery-list"
-            className="flex items-center gap-4 rounded-[2rem] bg-[oklch(0.96_0.05_85)] p-4 shadow-sm transition active:scale-[0.98]"
+            className="relative flex items-center gap-4 rounded-[2rem] bg-[oklch(0.96_0.05_85)] p-4 shadow-sm transition active:scale-[0.98]"
           >
             <RecipeBookCharacter className="h-20 w-20 shrink-0" />
             <div className="flex-1">
@@ -87,6 +87,12 @@ function Dashboard() {
               <div className="text-sm text-muted-foreground">Plan your basket</div>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground" strokeWidth={2.25} />
+            {hasNewItems && (
+              <span
+                aria-label="New items added"
+                className="absolute right-3 top-3 h-3 w-3 rounded-full bg-destructive ring-2 ring-background"
+              />
+            )}
           </Link>
 
           <Link
