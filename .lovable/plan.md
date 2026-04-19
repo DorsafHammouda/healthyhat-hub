@@ -1,37 +1,47 @@
 
-Concise plan covering all four asks. The route button is already same-tab via `window.location.href`, but the URL format can be improved to a more universal Google Maps walking-directions URL as requested. The notification dot needs a tiny new piece of state (a "last seen count" in localStorage) since we don't currently track it.
 
-### 1. Reset Trip button + AI clear (`src/routes/grocery-list.tsx`)
-- Add a small "Reset trip" pill button in the header area of the Grocery List view (top-right of the cost summary card).
-- On click: confirm via `window.confirm`, then in parallel:
-  - `supabase.from("grocery_lists").delete().eq("user_id", user.id)`
-  - `supabase.from("chat_messages").delete().eq("user_id", user.id)`
-- Locally clear `items` state and toast "Clean slate! 🌱". Realtime listener already handles wiping from other tabs.
-- Sprout's "clean slate greeting" happens naturally because the chat page loads zero messages and shows the existing empty state ("Tell me a meal you'd love to make…"). No extra change needed in `chat.tsx`.
+## Diagnosis
 
-### 2. Route button URL fix (`src/lib/mockStoreData.ts` + `src/routes/grocery-list.tsx`)
-- Update `directionsUrl(...)` to return the universal walking URL:
-  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(name)}+near+${lat},${lng}&travelmode=walking`
-  (uses store name + coords as the destination text and adds `travelmode=walking`).
-- In `openRoute`, switch from `window.location.href = ...` to `window.location.assign(...)` (semantically identical, matches the user's spec).
+**Issue 1 — AI not responding:** Gemini's tool-call streaming via the Lovable AI Gateway is unreliable for this model. When the model decides to call `add_grocery_items`, the SSE stream often emits ONLY tool-call deltas with **zero text content** in the first pass. The current code then makes a second pass (`streamPass(false, ...)`) without tools to get the assistant's text — but there's a strong chance Gemini returns tool_calls again or returns nothing visible because the conversation now has a tool result and the model thinks it's already done. Net effect: the user sees no text, just silence.
 
-### 3. Red notification dot on Dashboard "Grocery List" card (`src/routes/index.tsx`)
-- Add lightweight "unseen items" detection:
-  - Dashboard `useEffect` (after auth): query `supabase.from("grocery_lists").select("id", { count: "exact", head: true }).eq("user_id", user.id)` to get current count.
-  - Read `localStorage.getItem("hh:lastSeenGroceryCount")` (default 0). If `currentCount > lastSeen`, show a red dot.
-  - Subscribe to realtime INSERT events on `grocery_lists` filtered by user_id; bump current count and re-evaluate so the dot appears live when Sprout adds items while the dashboard is open.
-- Render a small absolute-positioned red dot (`h-3 w-3 rounded-full bg-destructive ring-2 ring-background`) on the top-right of the Grocery List card.
-- Dismissal: in `src/routes/grocery-list.tsx`, on mount once items load, write `localStorage.setItem("hh:lastSeenGroceryCount", String(items.length))`. Also re-write whenever items length changes while the page is open, so the dot stays cleared.
+Also: rapid double-sends (the session replay shows two messages fired ~0ms apart) hit the in-flight `streaming` guard inconsistently when typed quickly, leading to overlapping requests.
 
-### 4. AI performance boost (`supabase/functions/chat/index.ts`)
-- **Streaming-first**: Restructure to always stream. Make the first call with `stream: true` AND `tools` enabled. Parse the SSE stream from the gateway, accumulating any `tool_calls` deltas while forwarding text deltas straight to the client. If tool calls were emitted, execute them, then make a second streamed call and forward that stream too. (Gemini supports streamed tool-call arguments.) This removes the current "wait for full first response before streaming" bottleneck.
-- **Last 5 messages only**: `const trimmed = messages.slice(-5);` before building `convo`. System prompt always stays.
-- **Concise persona**: Append to `SYSTEM_PROMPT`: "Be concise but wholesome — 1–3 short sentences max. Prioritise calling `add_grocery_items` over chit-chat. No long explanations or filler."
+**Issue 2 — Double grocery items:** Two compounding causes:
+1. **No deduplication on insert.** `executeTool` blindly inserts every item the model returns. If the user sends "pizza" twice (or the model is called twice), every ingredient is inserted twice.
+2. **Retry/double-fire from the client.** When the first stream stalls without text, the user re-sends — but the first edge-function invocation already executed the tool and inserted items. The second invocation inserts them all over again. There's also no unique constraint on `(user_id, item_name)` in `grocery_lists`.
+
+## Plan
+
+### 1. Fix AI silence after tool call (`supabase/functions/chat/index.ts`)
+- After tool execution, **force a text response** in the second pass by appending a tiny system nudge to `convo` before `streamPass(false, ...)`: `{ role: "system", content: "Now write your short, warm reply to the user about the ingredient list you just added. Mention 1–2 healthy swaps. Do not call any more tools." }`.
+- If the second pass *still* returns no text (defensive fallback), synthesize a wholesome line on the server: `"Ooh! I've put together a wholesome ingredient list for you. 🌱"` and stream it as a single SSE chunk so the user always sees Sprout reply.
+- Switch model from `google/gemini-2.5-flash` to `google/gemini-2.5-flash` is fine but add `tool_choice: "auto"` explicitly and `parallel_tool_calls: false` to prevent the model emitting two simultaneous identical tool calls (a known cause of duplicate inserts).
+
+### 2. Deduplicate grocery inserts (`supabase/functions/chat/index.ts` — `executeTool`)
+Before inserting, fetch the user's existing pending items and filter out any case-insensitive name match. Also dedupe within the incoming batch itself:
+```ts
+const incomingUnique = Array.from(new Map(items.map(i => [i.item_name.trim().toLowerCase(), i.item_name.trim()])).values());
+const { data: existing } = await supabase.from("grocery_lists").select("item_name").eq("user_id", userId);
+const existingSet = new Set((existing ?? []).map(r => r.item_name.toLowerCase()));
+const toInsert = incomingUnique.filter(n => !existingSet.has(n.toLowerCase()));
+```
+Only insert `toInsert`. Return `{ ok: true, added, skipped_duplicates }` so the model knows.
+
+### 3. Prevent client double-send (`src/routes/chat.tsx`)
+The `streaming` flag exists but React state updates are async — two fast keystroke-Enter submissions can both pass the guard. Add a `sendingRef = useRef(false)` synchronous lock checked/set at the very top of `send()`, cleared in `finally`. This guarantees only one in-flight request even on rapid double-tap.
+
+### 4. Database-level safety net (migration)
+Add a partial unique index on `grocery_lists` so duplicates are physically impossible even if logic above slips:
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS grocery_lists_user_item_unique
+  ON public.grocery_lists (user_id, lower(item_name));
+```
+Switch the insert to `.upsert(rows, { onConflict: "user_id,item_name", ignoreDuplicates: true })` — but since the index uses `lower(item_name)`, we'll keep the explicit dedup in code and let the index act as a safety net (insert errors on conflict are caught and logged, not surfaced).
 
 ### Files touched
-- `src/routes/grocery-list.tsx` — Reset button, dismissal write, `assign()` swap
-- `src/routes/index.tsx` — notification dot + count query + realtime sub
-- `src/lib/mockStoreData.ts` — `directionsUrl` rewrite
-- `supabase/functions/chat/index.ts` — streaming-first refactor, 5-msg window, prompt tweak
+- `supabase/functions/chat/index.ts` — tool-call recovery, forced text reply, deduplication, `parallel_tool_calls: false`
+- `src/routes/chat.tsx` — `sendingRef` synchronous lock
+- New migration — partial unique index on `grocery_lists(user_id, lower(item_name))`
 
-No DB schema changes, no new dependencies.
+No new dependencies. No schema column changes — just an index.
+
