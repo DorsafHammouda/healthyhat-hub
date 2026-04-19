@@ -134,7 +134,7 @@ function ChatPage() {
           <div className="mt-8 flex flex-col items-center text-center">
             <ChefCharacter className="h-32 w-32" />
             <p className="mt-4 max-w-xs text-sm text-muted-foreground">
-              Hi! I'm your nutrition buddy 🥗 Ask me about ingredients, recipes, or how to eat healthier.
+              Hi, I'm Sprout 🌱 Tell me a meal you'd love to make and I'll build your grocery list.
             </p>
           </div>
         )}
@@ -171,7 +171,7 @@ function ChatPage() {
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about food, recipes…"
+          placeholder="Try: I want to make lasagna…"
           className="h-12 rounded-full border-border bg-card px-5 shadow-sm"
           disabled={streaming}
         />
