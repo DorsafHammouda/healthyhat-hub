@@ -1,56 +1,35 @@
 
-Two parts: (1) ditch Google Maps for an in-app mock directions overlay, (2) add a Store Manager portal with a Slate/Blue theme, mock analytics, and role switching.
+Small, focused refactor. No new dependencies, no DB changes.
 
-## 1. In-app Mock Directions (fix Route button)
+### 1. Remove "Manager view" pill from Customer Dashboard (`src/routes/index.tsx`)
+Delete the slate-blue "Manager view" `<Link to="/manager">` pill in the header. The sign-out button stays as the only header control.
 
-**Why Google Maps fails:** Even with the universal URL, mobile webviews/preview iframes intermittently block the redirect or sandbox prevents external navigation. Reliable fix: skip the external dependency entirely.
+### 2. New Manager Login screen (`src/routes/manager.login.tsx` — new file)
+Slate/blue themed page (wrapped in `.manager-theme`) matching the manager portal aesthetic. Fields:
+- **Name** (text)
+- **Store Name** (text, required)
+- **Email** (email, required)
+- "Sign In" button → `navigate({ to: "/manager/$storeName", params: { storeName: storeName.trim() } })`
+- "← Back to Customer App" link → `/auth`
 
-**Solution:** Replace `window.location.assign(...)` with a wholesome in-app `<DirectionsModal>` (Dialog) that shows mock turn-by-turn walking directions to the store.
+No real auth, no Supabase calls — pure demo flow per the brief.
 
-- New component: `src/components/DirectionsModal.tsx` — uses existing `dialog.tsx`, rounded green styling matching the app.
-- Generates deterministic mock steps based on store name + distance: e.g. "Head north on Main St (200m) → Turn right onto Oak Ave (350m) → Arrive at Whole Foods 🌿". Includes total distance, estimated walk time (12 min/km), and a little MapPin illustration.
-- In `src/routes/grocery-list.tsx`: remove `directionsUrl` redirect; add `routeTarget` state; `openRoute` opens modal instead.
-- Keep `directionsUrl` export to avoid breaking imports, mark it unused.
+### 3. Replace `/manager` redirect with login redirect (`src/routes/manager.tsx`)
+Currently redirects to a hardcoded first store (`MOCK_STORES[0].name` = "ALDI"). Change it to redirect to `/manager/login` so there's no static store route. This satisfies "remove the static /manager/aldi route" — the dashboard is now only reachable via the login form's typed store name.
 
-## 2. Store Manager Portal
+### 4. Update auth screen link (`src/routes/auth.tsx`)
+Change the "Store Manager Portal" `<Link>` from `to="/manager"` → `to="/manager/login"`. Copy stays the same ("For business — Store Manager Portal").
 
-### Theme
-Slate/Business-Blue palette, applied via a wrapper class `.manager-theme` defined in `src/styles.css` (CSS variables override on that scope only — keeps customer side untouched).
-- Background: `oklch(0.22 0.03 250)` (deep slate)
-- Card surface: `oklch(0.28 0.04 250)` 
-- Primary accent: `oklch(0.62 0.16 240)` (business blue)
-- Text: light slate
-
-### Routes (no auth gate — demo mode, accessible by toggle)
-- `src/routes/manager.tsx` — Manager Dashboard (default redirects to first store)
-- `src/routes/manager.$storeName.tsx` — per-store dashboard
-
-### Entry points
-- **Welcome/auth screen** (`src/routes/auth.tsx`): add small "Store Manager Portal →" link button below the main signup/login form, styled in slate.
-- **Customer dashboard** (`src/routes/index.tsx`): add discreet "Manager view" pill in header for demos.
-- **Manager dashboard**: prominent "← Back to Customer View" button in top-left header.
-
-### Dashboard UI (`manager.$storeName.tsx`)
-Header: "Store Insights: {StoreName} — Daily Overview" + store selector dropdown (uses `MOCK_STORES`).
-
-Grid layout (2-col on desktop, stacked on mobile 390px):
-
-1. **Pie chart "Shopping Intent vs. Reality"** — Recharts (already installed via `chart.tsx`). Mock: 68% Found, 22% Not Found, 10% Pending.
-2. **Bar graph "Top 'Not Found' Items"** — Recharts horizontal bar. Mock top 5: Organic Milk, Avocados, Oat Milk, Sourdough, Free-range Eggs.
-3. **Retention stat card** — Big number "72%" + subtitle "of users who couldn't find an item returned within 48 hours". Trend arrow ↑ 4% vs. last week.
-4. **Aisle Heatmap** — Simple 4×3 CSS grid of aisle cells colored by intensity (oklch lightness scale on slate-blue), with labels (Produce, Dairy, Bakery, etc.).
-5. **Recent Shopping Trips table** — Scrollable, uses `table.tsx`. Columns: Time | Items | Success Rate. Anonymized as "User #102", deterministic mock generated from store name.
-
-All data lives in a new `src/lib/mockManagerData.ts` — deterministic per store name (hash-seeded) so each store shows different but stable numbers.
+### 5. Manager Dashboard header cleanup (`src/routes/manager.$storeName.tsx`)
+- Rename the existing "Customer View" back-button to **"Logout"** with a `LogOut` icon, pointing to `/auth` (returns to main login screen as requested).
+- Keep the store-switcher dropdown so managers can still browse other mock stores once inside.
+- Theme stays scoped via the existing `.manager-theme` wrapper — no change needed; it's already locked to manager routes only.
 
 ### Files touched
-- `src/components/DirectionsModal.tsx` — new
-- `src/routes/grocery-list.tsx` — swap route action to open modal
-- `src/routes/manager.tsx` — new (redirects to first store)
-- `src/routes/manager.$storeName.tsx` — new (dashboard)
-- `src/lib/mockManagerData.ts` — new (deterministic mock analytics)
-- `src/styles.css` — add `.manager-theme` scoped CSS variables
-- `src/routes/auth.tsx` — add "Store Manager Portal" link
-- `src/routes/index.tsx` — add discreet "Manager view" pill
+- `src/routes/index.tsx` — remove Manager view pill
+- `src/routes/manager.login.tsx` — **new**, slate-themed login form
+- `src/routes/manager.tsx` — redirect to `/manager/login` instead of a hardcoded store
+- `src/routes/auth.tsx` — update portal link target to `/manager/login`
+- `src/routes/manager.$storeName.tsx` — swap "Customer View" button for "Logout" → `/auth`
 
-No new dependencies (Recharts is already in via the shadcn `chart.tsx`). No DB changes.
+Route tree regenerates automatically; no manual edits to `routeTree.gen.ts`.
