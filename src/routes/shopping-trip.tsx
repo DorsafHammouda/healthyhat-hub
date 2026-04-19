@@ -111,7 +111,7 @@ function ShoppingTrip() {
   // STT: ElevenLabs Scribe
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
-    commitStrategy: CommitStrategy.Vad,
+    commitStrategy: CommitStrategy.VAD,
     onPartialTranscript: (data: any) => {
       const partial = data?.text ?? "";
       const base = inputBeforeDictationRef.current;
