@@ -154,7 +154,20 @@ function GroceryListPage() {
   const openRoute = (it: Item) => {
     const ranked = rankStores(pos);
     const target = ranked.find((s) => s.name === it.store_name) ?? nearest;
-    window.location.href = directionsUrl(target.lat, target.lng, target.name);
+    window.location.assign(directionsUrl(target.lat, target.lng, target.name));
+  };
+
+  const resetTrip = async () => {
+    if (!user) return;
+    if (!window.confirm("Reset trip? This clears your grocery list and chat history.")) return;
+    setItems([]);
+    localStorage.setItem("hh:lastSeenGroceryCount", "0");
+    const [g, c] = await Promise.all([
+      supabase.from("grocery_lists").delete().eq("user_id", user.id),
+      supabase.from("chat_messages").delete().eq("user_id", user.id),
+    ]);
+    if (g.error || c.error) toast.error(g.error?.message ?? c.error?.message ?? "Reset failed");
+    else toast.success("Clean slate! 🌱");
   };
 
   const pendingCount = items.filter((i) => i.status === "pending").length;
