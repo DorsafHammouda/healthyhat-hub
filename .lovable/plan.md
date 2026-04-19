@@ -1,47 +1,56 @@
 
+Two parts: (1) ditch Google Maps for an in-app mock directions overlay, (2) add a Store Manager portal with a Slate/Blue theme, mock analytics, and role switching.
 
-## Diagnosis
+## 1. In-app Mock Directions (fix Route button)
 
-**Issue 1 — AI not responding:** Gemini's tool-call streaming via the Lovable AI Gateway is unreliable for this model. When the model decides to call `add_grocery_items`, the SSE stream often emits ONLY tool-call deltas with **zero text content** in the first pass. The current code then makes a second pass (`streamPass(false, ...)`) without tools to get the assistant's text — but there's a strong chance Gemini returns tool_calls again or returns nothing visible because the conversation now has a tool result and the model thinks it's already done. Net effect: the user sees no text, just silence.
+**Why Google Maps fails:** Even with the universal URL, mobile webviews/preview iframes intermittently block the redirect or sandbox prevents external navigation. Reliable fix: skip the external dependency entirely.
 
-Also: rapid double-sends (the session replay shows two messages fired ~0ms apart) hit the in-flight `streaming` guard inconsistently when typed quickly, leading to overlapping requests.
+**Solution:** Replace `window.location.assign(...)` with a wholesome in-app `<DirectionsModal>` (Dialog) that shows mock turn-by-turn walking directions to the store.
 
-**Issue 2 — Double grocery items:** Two compounding causes:
-1. **No deduplication on insert.** `executeTool` blindly inserts every item the model returns. If the user sends "pizza" twice (or the model is called twice), every ingredient is inserted twice.
-2. **Retry/double-fire from the client.** When the first stream stalls without text, the user re-sends — but the first edge-function invocation already executed the tool and inserted items. The second invocation inserts them all over again. There's also no unique constraint on `(user_id, item_name)` in `grocery_lists`.
+- New component: `src/components/DirectionsModal.tsx` — uses existing `dialog.tsx`, rounded green styling matching the app.
+- Generates deterministic mock steps based on store name + distance: e.g. "Head north on Main St (200m) → Turn right onto Oak Ave (350m) → Arrive at Whole Foods 🌿". Includes total distance, estimated walk time (12 min/km), and a little MapPin illustration.
+- In `src/routes/grocery-list.tsx`: remove `directionsUrl` redirect; add `routeTarget` state; `openRoute` opens modal instead.
+- Keep `directionsUrl` export to avoid breaking imports, mark it unused.
 
-## Plan
+## 2. Store Manager Portal
 
-### 1. Fix AI silence after tool call (`supabase/functions/chat/index.ts`)
-- After tool execution, **force a text response** in the second pass by appending a tiny system nudge to `convo` before `streamPass(false, ...)`: `{ role: "system", content: "Now write your short, warm reply to the user about the ingredient list you just added. Mention 1–2 healthy swaps. Do not call any more tools." }`.
-- If the second pass *still* returns no text (defensive fallback), synthesize a wholesome line on the server: `"Ooh! I've put together a wholesome ingredient list for you. 🌱"` and stream it as a single SSE chunk so the user always sees Sprout reply.
-- Switch model from `google/gemini-2.5-flash` to `google/gemini-2.5-flash` is fine but add `tool_choice: "auto"` explicitly and `parallel_tool_calls: false` to prevent the model emitting two simultaneous identical tool calls (a known cause of duplicate inserts).
+### Theme
+Slate/Business-Blue palette, applied via a wrapper class `.manager-theme` defined in `src/styles.css` (CSS variables override on that scope only — keeps customer side untouched).
+- Background: `oklch(0.22 0.03 250)` (deep slate)
+- Card surface: `oklch(0.28 0.04 250)` 
+- Primary accent: `oklch(0.62 0.16 240)` (business blue)
+- Text: light slate
 
-### 2. Deduplicate grocery inserts (`supabase/functions/chat/index.ts` — `executeTool`)
-Before inserting, fetch the user's existing pending items and filter out any case-insensitive name match. Also dedupe within the incoming batch itself:
-```ts
-const incomingUnique = Array.from(new Map(items.map(i => [i.item_name.trim().toLowerCase(), i.item_name.trim()])).values());
-const { data: existing } = await supabase.from("grocery_lists").select("item_name").eq("user_id", userId);
-const existingSet = new Set((existing ?? []).map(r => r.item_name.toLowerCase()));
-const toInsert = incomingUnique.filter(n => !existingSet.has(n.toLowerCase()));
-```
-Only insert `toInsert`. Return `{ ok: true, added, skipped_duplicates }` so the model knows.
+### Routes (no auth gate — demo mode, accessible by toggle)
+- `src/routes/manager.tsx` — Manager Dashboard (default redirects to first store)
+- `src/routes/manager.$storeName.tsx` — per-store dashboard
 
-### 3. Prevent client double-send (`src/routes/chat.tsx`)
-The `streaming` flag exists but React state updates are async — two fast keystroke-Enter submissions can both pass the guard. Add a `sendingRef = useRef(false)` synchronous lock checked/set at the very top of `send()`, cleared in `finally`. This guarantees only one in-flight request even on rapid double-tap.
+### Entry points
+- **Welcome/auth screen** (`src/routes/auth.tsx`): add small "Store Manager Portal →" link button below the main signup/login form, styled in slate.
+- **Customer dashboard** (`src/routes/index.tsx`): add discreet "Manager view" pill in header for demos.
+- **Manager dashboard**: prominent "← Back to Customer View" button in top-left header.
 
-### 4. Database-level safety net (migration)
-Add a partial unique index on `grocery_lists` so duplicates are physically impossible even if logic above slips:
-```sql
-CREATE UNIQUE INDEX IF NOT EXISTS grocery_lists_user_item_unique
-  ON public.grocery_lists (user_id, lower(item_name));
-```
-Switch the insert to `.upsert(rows, { onConflict: "user_id,item_name", ignoreDuplicates: true })` — but since the index uses `lower(item_name)`, we'll keep the explicit dedup in code and let the index act as a safety net (insert errors on conflict are caught and logged, not surfaced).
+### Dashboard UI (`manager.$storeName.tsx`)
+Header: "Store Insights: {StoreName} — Daily Overview" + store selector dropdown (uses `MOCK_STORES`).
+
+Grid layout (2-col on desktop, stacked on mobile 390px):
+
+1. **Pie chart "Shopping Intent vs. Reality"** — Recharts (already installed via `chart.tsx`). Mock: 68% Found, 22% Not Found, 10% Pending.
+2. **Bar graph "Top 'Not Found' Items"** — Recharts horizontal bar. Mock top 5: Organic Milk, Avocados, Oat Milk, Sourdough, Free-range Eggs.
+3. **Retention stat card** — Big number "72%" + subtitle "of users who couldn't find an item returned within 48 hours". Trend arrow ↑ 4% vs. last week.
+4. **Aisle Heatmap** — Simple 4×3 CSS grid of aisle cells colored by intensity (oklch lightness scale on slate-blue), with labels (Produce, Dairy, Bakery, etc.).
+5. **Recent Shopping Trips table** — Scrollable, uses `table.tsx`. Columns: Time | Items | Success Rate. Anonymized as "User #102", deterministic mock generated from store name.
+
+All data lives in a new `src/lib/mockManagerData.ts` — deterministic per store name (hash-seeded) so each store shows different but stable numbers.
 
 ### Files touched
-- `supabase/functions/chat/index.ts` — tool-call recovery, forced text reply, deduplication, `parallel_tool_calls: false`
-- `src/routes/chat.tsx` — `sendingRef` synchronous lock
-- New migration — partial unique index on `grocery_lists(user_id, lower(item_name))`
+- `src/components/DirectionsModal.tsx` — new
+- `src/routes/grocery-list.tsx` — swap route action to open modal
+- `src/routes/manager.tsx` — new (redirects to first store)
+- `src/routes/manager.$storeName.tsx` — new (dashboard)
+- `src/lib/mockManagerData.ts` — new (deterministic mock analytics)
+- `src/styles.css` — add `.manager-theme` scoped CSS variables
+- `src/routes/auth.tsx` — add "Store Manager Portal" link
+- `src/routes/index.tsx` — add discreet "Manager view" pill
 
-No new dependencies. No schema column changes — just an index.
-
+No new dependencies (Recharts is already in via the shadcn `chart.tsx`). No DB changes.
