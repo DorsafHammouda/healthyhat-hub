@@ -24,10 +24,48 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const [hasNewItems, setHasNewItems] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
+
+  // Track unseen grocery items for the red dot.
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    let count = 0;
+    const evaluate = () => {
+      const lastSeen = Number(localStorage.getItem("hh:lastSeenGroceryCount") ?? "0");
+      if (active) setHasNewItems(count > lastSeen);
+    };
+
+    supabase
+      .from("grocery_lists")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .then(({ count: c }) => {
+        count = c ?? 0;
+        evaluate();
+      });
+
+    const channel = supabase
+      .channel(`dashboard_grocery_${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "grocery_lists", filter: `user_id=eq.${user.id}` },
+        () => {
+          count += 1;
+          evaluate();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   if (loading || !user) {
     return <div className="grid min-h-screen place-items-center text-muted-foreground">Loading…</div>;
