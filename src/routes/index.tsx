@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { LogOut, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { RecipeBookCharacter } from "@/components/illustrations/RecipeBookCharac
 import { ChefCharacter } from "@/components/illustrations/ChefCharacter";
 import { MapPinCharacter } from "@/components/illustrations/MapPinCharacter";
 import { LeafBlob } from "@/components/illustrations/LeafBlob";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
