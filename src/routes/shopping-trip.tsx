@@ -28,15 +28,25 @@ type Msg = {
   pending?: boolean;
 };
 
-const CAMERA_URL = "http://11.35.149.194:5050/latest.jpg";
+const CAMERA_URL = "https://unripe-footing-situation.ngrok-free.dev/latest.jpg";
 
 async function fetchCameraFrame(): Promise<string | null> {
   try {
-    const resp = await fetch(CAMERA_URL, { method: "POST" });
-    if (!resp.ok) return null;
+    const resp = await fetch(CAMERA_URL, {
+      method: "POST",
+      mode: "cors",
+      headers: {
+        "ngrok-skip-browser-warning": "69420",
+      },
+    });
+    if (!resp.ok) {
+      console.error(`Fetch failed to ngrok: HTTP ${resp.status} ${resp.statusText}`);
+      return null;
+    }
     const json = await resp.json();
     return typeof json?.image === "string" ? json.image : null;
-  } catch {
+  } catch (err: any) {
+    console.error(`Fetch failed to ngrok: ${err?.name ?? "Error"} - ${err?.message ?? err}`);
     return null;
   }
 }
