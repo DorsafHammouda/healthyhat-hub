@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, TrendingUp, TrendingDown, Building2 } from "lucide-react";
+import { LogOut, TrendingUp, TrendingDown, Building2 } from "lucide-react";
 import {
   PieChart,
   Pie,
