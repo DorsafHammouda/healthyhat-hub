@@ -28,7 +28,7 @@ type Msg = {
   pending?: boolean;
 };
 
-const CAMERA_URL = "https://unripe-footing-situation.ngrok-free.dev/latest.jpg";
+const CAMERA_URL = "https://unripe-footing-situation.ngrok-free.dev/trigger-capture";
 
 async function fetchCameraFrame(): Promise<string | null> {
   try {
