@@ -1,14 +1,23 @@
 
-The endpoint `https://ngrok-free.dev` is wrong (DNS-failing). User wants the real Pi tunnel `https://unripe-footing-situation.ngrok-free.dev/latest.jpg`. That endpoint returns a raw JPEG (not JSON), so we must read it as a Blob and base64-encode it client-side, then forward to `vision-chat` (which already wraps it as `data:image/jpeg;base64,...`).
+## Problem
+`src/routes/manager.tsx` is the parent layout for `/manager/login` and `/manager/$storeName` (TanStack flat dot routing). Currently it renders `<Navigate to="/manager/login" />` instead of an `<Outlet />`, so visiting `/manager/login` re-mounts the parent → redirects again → infinite loop, and the login child never renders.
 
-### Changes (single file: `src/routes/shopping-trip.tsx`)
+## Fix (1 file)
+Update `src/routes/manager.tsx`:
+- Render `<Outlet />` so children (`login`, `$storeName`) display.
+- Handle the bare `/manager` index redirect via the route's `beforeLoad` (only fires when the parent matches with no child), redirecting to `/manager/login`.
 
-1. `CAMERA_URL` → `https://unripe-footing-situation.ngrok-free.dev/latest.jpg`
-2. `fetchCameraFrame()`:
-   - GET, `mode: "cors"`, headers `ngrok-skip-browser-warning: true` (drop `Content-Type` — it's a binary GET).
-   - 503 → `{ error: "warming" }`.
-   - Non-OK / network fail → `{ error: "offline" }`.
-   - On 200: `await resp.blob()` → FileReader → strip `data:image/jpeg;base64,` prefix → return `{ image: <base64> }`.
-3. Caller logic unchanged — still forwards base64 to `vision-chat`, never renders the image.
+```tsx
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
-No edge function, deps, or DB changes.
+export const Route = createFileRoute("/manager")({
+  beforeLoad: ({ location }) => {
+    if (location.pathname === "/manager" || location.pathname === "/manager/") {
+      throw redirect({ to: "/manager/login" });
+    }
+  },
+  component: () => <Outlet />,
+});
+```
+
+No other files change.
