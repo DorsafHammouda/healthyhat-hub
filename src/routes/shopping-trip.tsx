@@ -3,11 +3,12 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { MobileShell } from "@/components/MobileShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Camera, Send } from "lucide-react";
+import { Camera, Mic, Send, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useScribe, CommitStrategy } from "@elevenlabs/react";
 
 export const Route = createFileRoute("/shopping-trip")({
   head: () => ({
@@ -29,6 +30,7 @@ type Msg = {
 };
 
 const CAMERA_URL = "https://unripe-footing-situation.ngrok-free.dev/latest.jpg";
+const TTS_MUTED_KEY = "healthyhat:tts-muted";
 
 type CameraResult = { image: string } | { error: "warming" } | { error: "offline" };
 
@@ -78,8 +80,97 @@ function ShoppingTrip() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [cameraOffline, setCameraOffline] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const inputBeforeDictationRef = useRef("");
+
+  // Load mute pref
+  useEffect(() => {
+    try {
+      setMuted(localStorage.getItem(TTS_MUTED_KEY) === "1");
+    } catch {}
+  }, []);
+
+  const toggleMuted = () => {
+    setMuted((m) => {
+      const next = !m;
+      try {
+        localStorage.setItem(TTS_MUTED_KEY, next ? "1" : "0");
+      } catch {}
+      if (next && audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      return next;
+    });
+  };
+
+  // STT: ElevenLabs Scribe
+  const scribe = useScribe({
+    modelId: "scribe_v2_realtime",
+    commitStrategy: CommitStrategy.VAD,
+    onPartialTranscript: (data: any) => {
+      const partial = data?.text ?? "";
+      const base = inputBeforeDictationRef.current;
+      setInput(base ? `${base} ${partial}`.trim() : partial);
+    },
+    onCommittedTranscript: (data: any) => {
+      const committed = data?.text ?? "";
+      if (!committed) return;
+      const base = inputBeforeDictationRef.current;
+      const next = base ? `${base} ${committed}`.trim() : committed;
+      inputBeforeDictationRef.current = next;
+      setInput(next);
+    },
+  });
+
+  const startListening = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
+      if (error || !data?.token) {
+        toast.error("Couldn't start mic. Try again.");
+        return;
+      }
+      inputBeforeDictationRef.current = input;
+      await scribe.connect({
+        token: data.token,
+        microphone: { echoCancellation: true, noiseSuppression: true },
+      });
+      setListening(true);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message ?? "Mic failed");
+    }
+  };
+
+  const stopListening = async () => {
+    try {
+      await scribe.disconnect();
+    } catch {}
+    setListening(false);
+  };
+
+  const toggleMic = () => {
+    if (listening) stopListening();
+    else startListening();
+  };
+
+  // Auto-cleanup mic on unmount
+  useEffect(() => {
+    return () => {
+      try {
+        scribe.disconnect();
+      } catch {}
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -89,6 +180,36 @@ function ShoppingTrip() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
 
+  const playReply = async (text: string) => {
+    if (muted || !text) return;
+    try {
+      // Stop previous
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      const { data, error } = await supabase.functions.invoke("elevenlabs-tts", {
+        body: { text },
+      });
+      if (error) {
+        console.error("TTS invoke error", error);
+        return;
+      }
+      // data should be a Blob
+      const blob =
+        data instanceof Blob
+          ? data
+          : new Blob([data as ArrayBuffer], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play().catch((e) => console.error("Audio play failed", e));
+    } catch (e) {
+      console.error("playReply failed", e);
+    }
+  };
+
   const send = async (e: FormEvent) => {
     e.preventDefault();
     const text = input.trim();
@@ -96,7 +217,16 @@ function ShoppingTrip() {
     if (sendingRef.current) return;
     sendingRef.current = true;
 
+    // Stop dictation if active
+    if (listening) {
+      try {
+        await scribe.disconnect();
+      } catch {}
+      setListening(false);
+    }
+
     setInput("");
+    inputBeforeDictationRef.current = "";
     setBusy(true);
     setMessages((p) => [
       ...p,
@@ -153,6 +283,9 @@ function ShoppingTrip() {
         if (idx !== -1) next[idx] = { role: "assistant", content: reply };
         return next;
       });
+
+      // Speak the reply
+      playReply(reply);
     } catch (err: any) {
       toast.error(err?.message ?? "Assistant failed");
       setMessages((p) => p.filter((m) => !m.pending));
@@ -166,9 +299,23 @@ function ShoppingTrip() {
     <MobileShell
       title="Shopping Assistant"
       right={
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-[oklch(0.93_0.06_150)] text-[oklch(0.4_0.13_145)]">
-          <Camera className="h-5 w-5" strokeWidth={2.25} />
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleMuted}
+            aria-label={muted ? "Unmute voice" : "Mute voice"}
+            className="grid h-10 w-10 place-items-center rounded-full bg-secondary text-secondary-foreground shadow-sm transition active:scale-95"
+          >
+            {muted ? (
+              <VolumeX className="h-5 w-5" strokeWidth={2.25} />
+            ) : (
+              <Volume2 className="h-5 w-5" strokeWidth={2.25} />
+            )}
+          </button>
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-[oklch(0.93_0.06_150)] text-[oklch(0.4_0.13_145)]">
+            <Camera className="h-5 w-5" strokeWidth={2.25} />
+          </span>
+        </div>
       }
     >
       {cameraOffline && (
@@ -218,17 +365,32 @@ function ShoppingTrip() {
         onSubmit={send}
         className="fixed inset-x-0 bottom-24 z-10 mx-auto flex w-full max-w-md gap-2 px-4"
       >
+        <Button
+          type="button"
+          onClick={toggleMic}
+          aria-label={listening ? "Stop dictation" : "Start dictation"}
+          className={`h-12 w-12 shrink-0 rounded-full p-0 shadow-md ${
+            listening
+              ? "animate-pulse bg-red-500 text-white hover:bg-red-600"
+              : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+          }`}
+        >
+          <Mic className="h-5 w-5" strokeWidth={2.25} />
+        </Button>
         <Input
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about an item you see…"
+          onChange={(e) => {
+            setInput(e.target.value);
+            inputBeforeDictationRef.current = e.target.value;
+          }}
+          placeholder={listening ? "Listening…" : "Ask about an item you see…"}
           className="h-12 rounded-full border-border bg-card px-5 shadow-sm"
           disabled={busy}
         />
         <Button
           type="submit"
           disabled={busy || !input.trim()}
-          className="h-12 w-12 rounded-full bg-[oklch(0.74_0.14_55)] p-0 text-[oklch(0.99_0.01_95)] shadow-md hover:bg-[oklch(0.7_0.14_55)]"
+          className="h-12 w-12 shrink-0 rounded-full bg-[oklch(0.74_0.14_55)] p-0 text-[oklch(0.99_0.01_95)] shadow-md hover:bg-[oklch(0.7_0.14_55)]"
         >
           <Send className="h-5 w-5" strokeWidth={2.25} />
         </Button>
