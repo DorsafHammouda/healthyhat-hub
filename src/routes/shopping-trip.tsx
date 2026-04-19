@@ -266,6 +266,31 @@ function ShoppingTrip() {
     if (sendingRef.current) return;
     sendingRef.current = true;
 
+    // Prime speech synthesis inside the user gesture (required for iOS Safari / mobile)
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        if (!primedRef.current) {
+          const primer = new SpeechSynthesisUtterance("");
+          primer.volume = 0;
+          window.speechSynthesis.speak(primer);
+          primedRef.current = true;
+        }
+        // Pre-create utterance synchronously so it retains gesture context across the await
+        if (!muted) {
+          const utter = new SpeechSynthesisUtterance("");
+          if (voiceRef.current) {
+            utter.voice = voiceRef.current;
+            utter.lang = voiceRef.current.lang;
+          } else {
+            utter.lang = "en-US";
+          }
+          pendingUtterRef.current = utter;
+        }
+      } catch (err) {
+        console.error("[tts] prime failed", err);
+      }
+    }
+
     // Stop dictation if active
     if (listening) {
       try {
