@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { MobileShell } from "@/components/MobileShell";
 
 export const Route = createFileRoute("/stores")({
@@ -35,17 +35,6 @@ function StoresPage() {
     );
   }, []);
 
-  const stores = useMemo(() => {
-    if (!pos) return [];
-    const [lat, lng] = pos;
-    return [
-      { name: "Green Garden Market", type: "Organic grocer", lat: lat + 0.004, lng: lng + 0.003 },
-      { name: "Fresh & Co.", type: "Supermarket", lat: lat - 0.003, lng: lng + 0.005 },
-      { name: "Nature's Basket", type: "Health foods", lat: lat + 0.002, lng: lng - 0.004 },
-      { name: "Daily Harvest", type: "Produce shop", lat: lat - 0.005, lng: lng - 0.002 },
-    ];
-  }, [pos]);
-
   return (
     <MobileShell title="Nearby Stores">
       {denied && (
@@ -56,7 +45,7 @@ function StoresPage() {
       <div className="overflow-hidden rounded-3xl border border-border shadow-sm">
         {mounted && pos ? (
           <Suspense fallback={<div className="grid h-[70vh] place-items-center text-sm text-muted-foreground">Loading map…</div>}>
-            <StoresMap pos={pos} stores={stores} />
+            <StoresMap pos={pos} />
           </Suspense>
         ) : (
           <div className="grid h-[70vh] place-items-center text-sm text-muted-foreground">Locating you…</div>
