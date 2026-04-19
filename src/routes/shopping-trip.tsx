@@ -28,26 +28,35 @@ type Msg = {
   pending?: boolean;
 };
 
-const CAMERA_URL = "https://unripe-footing-situation.ngrok-free.dev/trigger-capture";
+const CAMERA_URL = "https://ngrok-free.dev";
 
-async function fetchCameraFrame(): Promise<string | null> {
+type CameraResult = { image: string } | { error: "warming" } | { error: "offline" };
+
+async function fetchCameraFrame(): Promise<CameraResult> {
   try {
     const resp = await fetch(CAMERA_URL, {
       method: "GET",
       mode: "cors",
       headers: {
         "ngrok-skip-browser-warning": "true",
+        "Content-Type": "application/json",
       },
     });
+    if (resp.status === 503) {
+      return { error: "warming" };
+    }
     if (!resp.ok) {
       console.error(`Fetch failed to ngrok: HTTP ${resp.status} ${resp.statusText}`);
-      return null;
+      return { error: "offline" };
     }
     const json = await resp.json();
-    return typeof json?.image === "string" ? json.image : null;
+    if (typeof json?.image_base64 === "string") {
+      return { image: json.image_base64 };
+    }
+    return { error: "offline" };
   } catch (err: any) {
     console.error(`Fetch failed to ngrok: ${err?.name ?? "Error"} - ${err?.message ?? err}`);
-    return null;
+    return { error: "offline" };
   }
 }
 
@@ -85,7 +94,15 @@ function ShoppingTrip() {
     ]);
 
     try {
-      const image = await fetchCameraFrame();
+      const result = await fetchCameraFrame();
+
+      if ("error" in result && result.error === "warming") {
+        toast("Camera warming up, please try again in a second.");
+        setMessages((p) => p.filter((m) => !m.pending));
+        return;
+      }
+
+      const image = "image" in result ? result.image : null;
       setCameraOffline(!image);
 
       if (!image) {
