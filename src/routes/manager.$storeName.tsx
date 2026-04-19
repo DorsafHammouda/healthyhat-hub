@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, TrendingUp, TrendingDown, Building2 } from "lucide-react";
+import { LogOut, TrendingUp, TrendingDown, Building2 } from "lucide-react";
 import {
   PieChart,
   Pie,
@@ -66,11 +66,11 @@ function ManagerDashboard() {
         <header className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Link
-              to="/"
+              to="/auth"
               className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-xs font-bold text-secondary-foreground transition hover:bg-secondary/80"
             >
-              <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
-              Customer View
+              <LogOut className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Logout
             </Link>
           </div>
           <div className="flex items-center gap-3">
