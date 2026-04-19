@@ -84,14 +84,51 @@ async function executeTool(
   if (name === "add_grocery_items") {
     const items = (args.items ?? []) as Array<{ item_name: string }>;
     if (!items.length) return JSON.stringify({ ok: false, error: "no items" });
-    const rows = items.map((i) => ({
+
+    // Dedupe within the incoming batch (case-insensitive, trimmed)
+    const incomingMap = new Map<string, string>();
+    for (const i of items) {
+      const trimmed = (i.item_name ?? "").trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (!incomingMap.has(key)) incomingMap.set(key, trimmed);
+    }
+    const incomingUnique = Array.from(incomingMap.entries()); // [key, displayName]
+
+    // Filter out any item already in the user's list
+    const { data: existing } = await supabase
+      .from("grocery_lists")
+      .select("item_name")
+      .eq("user_id", userId);
+    const existingSet = new Set(
+      ((existing ?? []) as Array<{ item_name: string }>).map((r) => r.item_name.toLowerCase()),
+    );
+    const toInsert = incomingUnique.filter(([key]) => !existingSet.has(key));
+    const skipped = incomingUnique.length - toInsert.length;
+
+    if (!toInsert.length) {
+      return JSON.stringify({ ok: true, added: [], skipped_duplicates: skipped });
+    }
+
+    const rows = toInsert.map(([, name]) => ({
       user_id: userId,
-      item_name: i.item_name,
+      item_name: name,
       status: "pending",
     }));
-    const { data, error } = await supabase.from("grocery_lists").insert(rows).select("id,item_name");
-    if (error) return JSON.stringify({ ok: false, error: error.message });
-    return JSON.stringify({ ok: true, added: data?.map((d: any) => d.item_name) ?? [] });
+    const { data, error } = await supabase
+      .from("grocery_lists")
+      .insert(rows)
+      .select("id,item_name");
+    if (error) {
+      // Unique-index conflicts are a safety net — log & report best-effort
+      console.error("grocery insert error:", error.message);
+      return JSON.stringify({ ok: false, error: error.message, skipped_duplicates: skipped });
+    }
+    return JSON.stringify({
+      ok: true,
+      added: data?.map((d: any) => d.item_name) ?? [],
+      skipped_duplicates: skipped,
+    });
   }
   if (name === "mark_item_not_found") {
     const { item_name, store_name } = args;
@@ -135,8 +172,6 @@ serve(async (req) => {
 
     const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed];
 
-    // Helper: stream a chat completion. Forwards text deltas to the client and
-    // accumulates any tool_call deltas. Returns the assembled tool calls (if any).
     async function streamPass(
       withTools: boolean,
       writer: WritableStreamDefaultWriter<Uint8Array>,
@@ -152,7 +187,9 @@ serve(async (req) => {
           model: "google/gemini-2.5-flash",
           messages: convo,
           stream: true,
-          ...(withTools ? { tools } : {}),
+          ...(withTools
+            ? { tools, tool_choice: "auto", parallel_tool_calls: false }
+            : {}),
         }),
       });
       if (!resp.ok || !resp.body) {
@@ -215,18 +252,19 @@ serve(async (req) => {
     const writer = writable.getWriter();
     const enc = new TextEncoder();
 
+    async function streamFallback(text: string) {
+      const out = JSON.stringify({ choices: [{ delta: { content: text } }] });
+      await writer.write(enc.encode(`data: ${out}\n\n`));
+    }
+
     (async () => {
       try {
         const first = await streamPass(true, writer, enc);
         if (first.status === 429 || first.status === 402) {
-          const errOut = JSON.stringify({
-            choices: [{ delta: { content: first.status === 429 ? "Rate limit exceeded." : "AI credits exhausted." } }],
-          });
-          await writer.write(enc.encode(`data: ${errOut}\n\n`));
+          await streamFallback(first.status === 429 ? "Rate limit exceeded." : "AI credits exhausted.");
         } else if (first.status !== 200) {
           console.error("AI first pass error:", first.status, first.errBody);
-          const errOut = JSON.stringify({ choices: [{ delta: { content: "Sorry, something went wrong. 🌱" } }] });
-          await writer.write(enc.encode(`data: ${errOut}\n\n`));
+          await streamFallback("Sorry, something went wrong. 🌱");
         } else if (first.toolCalls.length) {
           convo.push({
             role: "assistant",
@@ -239,7 +277,17 @@ serve(async (req) => {
             const result = await executeTool(tc.function.name, args, supabase, userId);
             convo.push({ role: "tool", tool_call_id: tc.id, content: result });
           }
-          await streamPass(false, writer, enc);
+          // Force a text reply on the second pass — no more tools.
+          convo.push({
+            role: "system",
+            content:
+              "Now write your short, warm reply to the user about the ingredient list you just added. Mention 1–2 healthy swaps you made. Do not call any more tools. Keep it to 1–3 short sentences.",
+          });
+          const second = await streamPass(false, writer, enc);
+          if (second.status !== 200 || !second.assistantContent.trim()) {
+            // Defensive fallback so the user always sees Sprout reply
+            await streamFallback("Ooh! I've put together a wholesome ingredient list for you. 🌱");
+          }
         }
         await writer.write(enc.encode(`data: [DONE]\n\n`));
       } catch (err) {
