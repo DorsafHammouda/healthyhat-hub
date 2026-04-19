@@ -88,6 +88,20 @@ function ShoppingTrip() {
       const image = await fetchCameraFrame();
       setCameraOffline(!image);
 
+      if (!image) {
+        setMessages((p) => {
+          const next = [...p];
+          const idx = next.findIndex((m) => m.pending);
+          if (idx !== -1)
+            next[idx] = {
+              role: "assistant",
+              content: "⚠️ Camera offline (Check ngrok tunnel)",
+              pending: true,
+            };
+          return next;
+        });
+      }
+
       const promptText = image ? text : `[no camera frame available] ${text}`;
 
       const { data, error } = await supabase.functions.invoke("vision-chat", {
