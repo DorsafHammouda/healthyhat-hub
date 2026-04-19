@@ -90,12 +90,43 @@ function ShoppingTrip() {
   const sendingRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const baseInputRef = useRef("");
+  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const primedRef = useRef(false);
+  const pendingUtterRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Load mute pref
+  // Load mute pref + preload voices
   useEffect(() => {
     try {
       setMuted(localStorage.getItem(TTS_MUTED_KEY) === "1");
     } catch {}
+
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const pickVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+      const en =
+        voices.find((v) => v.lang?.toLowerCase().startsWith("en") && v.localService) ||
+        voices.find((v) => v.lang?.toLowerCase().startsWith("en")) ||
+        voices[0];
+      if (en) voiceRef.current = en;
+    };
+    pickVoice();
+    window.speechSynthesis.onvoiceschanged = pickVoice;
+
+    // Warn if voices never load (e.g. Firefox Android)
+    const t = setTimeout(() => {
+      if (!window.speechSynthesis.getVoices().length) {
+        console.warn("speechSynthesis: no voices available on this device/browser");
+      }
+    }, 1500);
+
+    return () => {
+      clearTimeout(t);
+      try {
+        window.speechSynthesis.onvoiceschanged = null;
+      } catch {}
+    };
   }, []);
 
   const stopSpeaking = () => {
