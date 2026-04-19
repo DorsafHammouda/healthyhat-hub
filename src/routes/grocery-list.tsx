@@ -101,6 +101,11 @@ function GroceryListPage() {
     };
   }, [user]);
 
+  // Dismiss the dashboard "new items" red dot whenever this view shows the list.
+  useEffect(() => {
+    localStorage.setItem("hh:lastSeenGroceryCount", String(items.length));
+  }, [items.length]);
+
   const nearest = useMemo(() => getNearestStore(pos), [pos]);
 
   const totalCost = useMemo(() => {
@@ -176,14 +181,24 @@ function GroceryListPage() {
     <MobileShell title="Grocery List">
       {/* Cost + nearest store summary */}
       <div className="rounded-[2rem] bg-[oklch(0.93_0.06_150)] p-5 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-wide text-foreground/60">
-          Estimated total · {pendingCount} item{pendingCount === 1 ? "" : "s"}
-        </p>
-        <p className="mt-1 text-3xl font-extrabold text-foreground">${totalCost.toFixed(2)}</p>
-        <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
-          <MapPin className="h-3.5 w-3.5" strokeWidth={2.5} />
-          Nearest: {nearest.name} · {nearest.distanceKm.toFixed(1)} km
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wide text-foreground/60">
+              Estimated total · {pendingCount} item{pendingCount === 1 ? "" : "s"}
+            </p>
+            <p className="mt-1 text-3xl font-extrabold text-foreground">${totalCost.toFixed(2)}</p>
+            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
+              <MapPin className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Nearest: {nearest.name} · {nearest.distanceKm.toFixed(1)} km
+            </p>
+          </div>
+          <button
+            onClick={resetTrip}
+            className="shrink-0 rounded-full bg-white/70 px-3 py-1.5 text-[11px] font-bold text-foreground/80 shadow-sm hover:bg-white"
+          >
+            Reset trip
+          </button>
+        </div>
       </div>
 
       {/* Hint to use the chat */}
@@ -191,7 +206,7 @@ function GroceryListPage() {
         onClick={() => navigate({ to: "/chat" })}
         className="mt-4 w-full rounded-[1.75rem] bg-[oklch(0.96_0.05_85)] px-5 py-3 text-left text-sm font-semibold text-foreground shadow-sm hover:bg-[oklch(0.94_0.06_85)]"
       >
-        ✨ Paste a recipe in chat — I'll add the ingredients automatically.
+        ✨ Tell Sprout a meal in chat — I'll add the ingredients automatically.
       </button>
 
       {/* Items */}
