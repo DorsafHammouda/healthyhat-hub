@@ -154,7 +154,7 @@ function GroceryListPage() {
   const openRoute = (it: Item) => {
     const ranked = rankStores(pos);
     const target = ranked.find((s) => s.name === it.store_name) ?? nearest;
-    window.open(directionsUrl(target.lat, target.lng, target.name), "_blank");
+    window.location.href = directionsUrl(target.lat, target.lng, target.name);
   };
 
   const pendingCount = items.filter((i) => i.status === "pending").length;
