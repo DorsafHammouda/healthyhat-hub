@@ -29,6 +29,7 @@ function ChatPage() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -53,6 +54,8 @@ function ChatPage() {
     e.preventDefault();
     const text = input.trim();
     if (!text || streaming || !user || !session) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
 
     const userMsg: Msg = { role: "user", content: text };
     setMessages((p) => [...p, userMsg]);
@@ -124,6 +127,7 @@ function ChatPage() {
       toast.error(err?.message ?? "Chat failed");
     } finally {
       setStreaming(false);
+      sendingRef.current = false;
     }
   };
 
