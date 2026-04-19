@@ -16,6 +16,7 @@ import { Route as GroceryListRouteImport } from './routes/grocery-list'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ManagerLoginRouteImport } from './routes/manager.login'
 import { Route as ManagerStoreNameRouteImport } from './routes/manager.$storeName'
 
 const StoresRoute = StoresRouteImport.update({
@@ -53,6 +54,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManagerLoginRoute = ManagerLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => ManagerRoute,
+} as any)
 const ManagerStoreNameRoute = ManagerStoreNameRouteImport.update({
   id: '/$storeName',
   path: '/$storeName',
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/shopping-trip': typeof ShoppingTripRoute
   '/stores': typeof StoresRoute
   '/manager/$storeName': typeof ManagerStoreNameRoute
+  '/manager/login': typeof ManagerLoginRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByTo {
   '/shopping-trip': typeof ShoppingTripRoute
   '/stores': typeof StoresRoute
   '/manager/$storeName': typeof ManagerStoreNameRoute
+  '/manager/login': typeof ManagerLoginRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   '/shopping-trip': typeof ShoppingTripRoute
   '/stores': typeof StoresRoute
   '/manager/$storeName': typeof ManagerStoreNameRoute
+  '/manager/login': typeof ManagerLoginRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +110,7 @@ export interface FileRouteTypes {
     | '/shopping-trip'
     | '/stores'
     | '/manager/$storeName'
+    | '/manager/login'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/shopping-trip'
     | '/stores'
     | '/manager/$storeName'
+    | '/manager/login'
   id:
     | '__root__'
     | '/'
@@ -121,6 +132,7 @@ export interface FileRouteTypes {
     | '/shopping-trip'
     | '/stores'
     | '/manager/$storeName'
+    | '/manager/login'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manager/login': {
+      id: '/manager/login'
+      path: '/login'
+      fullPath: '/manager/login'
+      preLoaderRoute: typeof ManagerLoginRouteImport
+      parentRoute: typeof ManagerRoute
+    }
     '/manager/$storeName': {
       id: '/manager/$storeName'
       path: '/$storeName'
@@ -196,10 +215,12 @@ declare module '@tanstack/react-router' {
 
 interface ManagerRouteChildren {
   ManagerStoreNameRoute: typeof ManagerStoreNameRoute
+  ManagerLoginRoute: typeof ManagerLoginRoute
 }
 
 const ManagerRouteChildren: ManagerRouteChildren = {
   ManagerStoreNameRoute: ManagerStoreNameRoute,
+  ManagerLoginRoute: ManagerLoginRoute,
 }
 
 const ManagerRouteWithChildren =
@@ -217,3 +238,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
