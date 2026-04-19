@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Leaf } from "lucide-react";
+import { Leaf, Building2, ArrowRight } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -107,6 +108,22 @@ function AuthPage() {
             </Button>
           </form>
         </div>
+
+        <Link
+          to="/manager"
+          className="mt-5 flex items-center justify-between rounded-2xl bg-[oklch(0.28_0.04_250)] px-5 py-3.5 text-[oklch(0.95_0.02_240)] shadow-sm transition hover:bg-[oklch(0.32_0.04_250)]"
+        >
+          <span className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-[oklch(0.62_0.16_240)] text-[oklch(0.99_0.01_240)]">
+              <Building2 className="h-4 w-4" strokeWidth={2.5} />
+            </span>
+            <span>
+              <span className="block text-xs font-bold uppercase tracking-wider opacity-70">For business</span>
+              <span className="block text-sm font-extrabold">Store Manager Portal</span>
+            </span>
+          </span>
+          <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+        </Link>
       </div>
     </div>
   );

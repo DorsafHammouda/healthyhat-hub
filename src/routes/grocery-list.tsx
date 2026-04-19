@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Check, MapPin, Navigation, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { RecipeBookCharacter } from "@/components/illustrations/RecipeBookCharacter";
+import { DirectionsModal } from "@/components/DirectionsModal";
 import {
-  directionsUrl,
   estimateItemPrice,
   getNearestStore,
   getNextStoreAfter,
   getStoreByName,
   rankStores,
+  type RankedStore,
 } from "@/lib/mockStoreData";
 
 export const Route = createFileRoute("/grocery-list")({
@@ -39,6 +40,7 @@ function GroceryListPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [pos, setPos] = useState<[number, number] | null>(null);
+  const [routeTarget, setRouteTarget] = useState<RankedStore | null>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -159,7 +161,7 @@ function GroceryListPage() {
   const openRoute = (it: Item) => {
     const ranked = rankStores(pos);
     const target = ranked.find((s) => s.name === it.store_name) ?? nearest;
-    window.location.assign(directionsUrl(target.lat, target.lng, target.name));
+    setRouteTarget(target);
   };
 
   const resetTrip = async () => {
@@ -231,6 +233,11 @@ function GroceryListPage() {
           />
         ))}
       </ul>
+      <DirectionsModal
+        open={routeTarget !== null}
+        onOpenChange={(open) => !open && setRouteTarget(null)}
+        store={routeTarget}
+      />
     </MobileShell>
   );
 }

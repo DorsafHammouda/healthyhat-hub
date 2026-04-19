@@ -11,10 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as StoresRouteImport } from './routes/stores'
 import { Route as ShoppingTripRouteImport } from './routes/shopping-trip'
+import { Route as ManagerRouteImport } from './routes/manager'
 import { Route as GroceryListRouteImport } from './routes/grocery-list'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ManagerStoreNameRouteImport } from './routes/manager.$storeName'
 
 const StoresRoute = StoresRouteImport.update({
   id: '/stores',
@@ -24,6 +26,11 @@ const StoresRoute = StoresRouteImport.update({
 const ShoppingTripRoute = ShoppingTripRouteImport.update({
   id: '/shopping-trip',
   path: '/shopping-trip',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManagerRoute = ManagerRouteImport.update({
+  id: '/manager',
+  path: '/manager',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GroceryListRoute = GroceryListRouteImport.update({
@@ -46,22 +53,31 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManagerStoreNameRoute = ManagerStoreNameRouteImport.update({
+  id: '/$storeName',
+  path: '/$storeName',
+  getParentRoute: () => ManagerRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/chat': typeof ChatRoute
   '/grocery-list': typeof GroceryListRoute
+  '/manager': typeof ManagerRouteWithChildren
   '/shopping-trip': typeof ShoppingTripRoute
   '/stores': typeof StoresRoute
+  '/manager/$storeName': typeof ManagerStoreNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/chat': typeof ChatRoute
   '/grocery-list': typeof GroceryListRoute
+  '/manager': typeof ManagerRouteWithChildren
   '/shopping-trip': typeof ShoppingTripRoute
   '/stores': typeof StoresRoute
+  '/manager/$storeName': typeof ManagerStoreNameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -69,8 +85,10 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/chat': typeof ChatRoute
   '/grocery-list': typeof GroceryListRoute
+  '/manager': typeof ManagerRouteWithChildren
   '/shopping-trip': typeof ShoppingTripRoute
   '/stores': typeof StoresRoute
+  '/manager/$storeName': typeof ManagerStoreNameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -79,18 +97,30 @@ export interface FileRouteTypes {
     | '/auth'
     | '/chat'
     | '/grocery-list'
+    | '/manager'
     | '/shopping-trip'
     | '/stores'
+    | '/manager/$storeName'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/chat' | '/grocery-list' | '/shopping-trip' | '/stores'
+  to:
+    | '/'
+    | '/auth'
+    | '/chat'
+    | '/grocery-list'
+    | '/manager'
+    | '/shopping-trip'
+    | '/stores'
+    | '/manager/$storeName'
   id:
     | '__root__'
     | '/'
     | '/auth'
     | '/chat'
     | '/grocery-list'
+    | '/manager'
     | '/shopping-trip'
     | '/stores'
+    | '/manager/$storeName'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -98,6 +128,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ChatRoute: typeof ChatRoute
   GroceryListRoute: typeof GroceryListRoute
+  ManagerRoute: typeof ManagerRouteWithChildren
   ShoppingTripRoute: typeof ShoppingTripRoute
   StoresRoute: typeof StoresRoute
 }
@@ -116,6 +147,13 @@ declare module '@tanstack/react-router' {
       path: '/shopping-trip'
       fullPath: '/shopping-trip'
       preLoaderRoute: typeof ShoppingTripRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manager': {
+      id: '/manager'
+      path: '/manager'
+      fullPath: '/manager'
+      preLoaderRoute: typeof ManagerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/grocery-list': {
@@ -146,14 +184,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manager/$storeName': {
+      id: '/manager/$storeName'
+      path: '/$storeName'
+      fullPath: '/manager/$storeName'
+      preLoaderRoute: typeof ManagerStoreNameRouteImport
+      parentRoute: typeof ManagerRoute
+    }
   }
 }
+
+interface ManagerRouteChildren {
+  ManagerStoreNameRoute: typeof ManagerStoreNameRoute
+}
+
+const ManagerRouteChildren: ManagerRouteChildren = {
+  ManagerStoreNameRoute: ManagerStoreNameRoute,
+}
+
+const ManagerRouteWithChildren =
+  ManagerRoute._addFileChildren(ManagerRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   ChatRoute: ChatRoute,
   GroceryListRoute: GroceryListRoute,
+  ManagerRoute: ManagerRouteWithChildren,
   ShoppingTripRoute: ShoppingTripRoute,
   StoresRoute: StoresRoute,
 }
